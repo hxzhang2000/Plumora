@@ -166,7 +166,7 @@ input:focus, textarea:focus { border-color: var(--accent); }
 .rec-item { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; margin-bottom: 10px; cursor: pointer; transition: border .2s; }
 .rec-item:hover { border-color: var(--accent); }
 .rec-line1 { display: flex; justify-content: space-between; align-items: center; }
-.rec-line1 b { font-size: 15px; font-family: "Noto Serif SC", serif; }
+.rec-line1 b { font-size: 15px; font-family: "Noto Serif SC", serif; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rec-line2 { font-size: 12px; color: var(--muted); margin-top: 5px; }
 .rec-line3 { font-size: 12px; color: var(--accent); margin-top: 3px; }
 

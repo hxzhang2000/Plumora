@@ -11,11 +11,20 @@ desktop.ini
 .vscode/
 *.swp
 
-# ── 签名与本地配置（见 docs/dev/08 §4.3 第 7 条）──
+# ── 签名与本地配置（见 docs/dev/08 §4.4 发布检查单第 8 条）──
 local.properties
 *.jks
 *.keystore
 keystore.properties
+
+# ── Node / 前端工程 ──────────────────────────────
+node_modules/
+dist/
+.tmp-smoke-dist/
+*.tsbuildinfo
+coverage/
+.vite/
+npm-debug.log*
 
 # ── 未来 Android 工程（M0 起按需启用）──────────────
 # ⚠️ 不要写裸 `build/` 或 `**/build/`：
@@ -25,3 +34,14 @@ keystore.properties
 #    /build/
 #    /.gradle/
 #    /.kotlin/
+
+# ── AI 助手工作目录 .workbuddy/（代码审查 I-5 的决策）──
+# 逐目录决策，不整目录忽略：
+#   ✅ .workbuddy/checks/     —— **有意入库**。三个文档自查脚本被 07 测试计划引用，
+#                                是可复跑的回归护栏，属于项目资产。
+#   ❌ .workbuddy/memory/     —— 会话工作记忆，只对本机有意义，且会随时间无限增长。
+#   ❌ .workbuddy/migrations/ —— 一次性迁移脚本，执行完即失去价值。
+# ⚠️ 已入库的 memory/ 文件需执行一次 `git rm -r --cached .workbuddy/memory` 才会真正退出跟踪
+#    （.gitignore 对已被跟踪的文件无效），文件本身仍在磁盘上。
+.workbuddy/memory/
+.workbuddy/migrations/

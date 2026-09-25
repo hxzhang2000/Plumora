@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>观梅 · Plumora 代码审查报告 — 2026-09-25</title>
+<style>
+  :root{
+    --paper:#faf7f0; --card:#fffdf8; --ink:#1f1b16; --ink-2:#4a4239; --muted:#8a7f70;
+    --line:#e6ddcd; --line-2:#d6c9b4; --accent:#b03a2e; --accent-soft:#f7e8e5;
+    --high:#b03a2e; --high-soft:#fbeae7;
+    --med:#9a6a12; --med-soft:#fdf3e0;
+    --low:#4a6b52; --low-soft:#eaf1ec;
+    --ok:#3f6b4a;
+    --mono:"Cascadia Mono","Consolas","Menlo",monospace;
+    --sans:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+       font-size:15px;line-height:1.7;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1040px;margin:0 auto;padding:40px 22px 80px}
+
+  header.top{border-bottom:2px solid var(--accent);padding-bottom:20px;margin-bottom:26px}
+  h1{font-size:25px;margin:0 0 6px;letter-spacing:.5px}
+  h1 .sub{font-weight:400;color:var(--muted);font-size:16px}
+  .meta{width:100%;border-collapse:collapse;margin-top:16px;font-size:13.5px}
+  .meta th{text-align:left;width:104px;color:var(--muted);font-weight:400;padding:3px 10px 3px 0;vertical-align:top}
+  .meta td{padding:3px 0;color:var(--ink-2)}
+  code{font-family:var(--mono);font-size:.88em;background:#f2ece0;border:1px solid var(--line);
+       border-radius:4px;padding:1px 5px;white-space:nowrap}
+
+  h2{font-size:19px;margin:38px 0 14px;padding-left:11px;border-left:4px solid var(--accent)}
+  h3{font-size:15.5px;margin:26px 0 10px;color:var(--ink-2)}
+
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:12px;margin:20px 0 8px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+  .card .n{font-size:28px;font-weight:700;line-height:1.15;font-family:var(--mono)}
+  .card .k{font-size:12.5px;color:var(--muted);margin-top:3px}
+  .card.crit .n{color:#7d1f16} .card.hi .n{color:var(--high)}
+  .card.md .n{color:var(--med)} .card.lo .n{color:var(--low)}
+  .card.vf .n{color:var(--ok)}
+
+  .verdict{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--accent);
+           border-radius:0 12px 12px 0;padding:16px 20px;margin:18px 0}
+  .verdict p{margin:0 0 10px} .verdict p:last-child{margin:0}
+  .verdict b{color:var(--accent)}
+
+  .filters{display:flex;flex-wrap:wrap;gap:8px;margin:22px 0 6px;position:sticky;top:0;
+           background:var(--paper);padding:10px 0;z-index:5;border-bottom:1px solid var(--line)}
+  .fbtn{border:1px solid var(--line-2);background:var(--card);color:var(--muted);
+        border-radius:999px;padding:5px 15px;font-size:13px;cursor:pointer;font-family:inherit}
+  .fbtn:hover{border-color:var(--accent);color:var(--accent)}
+  .fbtn.on{background:var(--accent);border-color:var(--accent);color:#fff}
+
+  .grp{margin:26px 0 0}
+  .grp > .gh{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+  .tag{font-size:12px;font-weight:700;letter-spacing:.08em;padding:3px 10px;border-radius:6px;color:#fff}
+  .tag.hi{background:var(--high)} .tag.md{background:var(--med)} .tag.lo{background:var(--low)}
+
+  .item{background:var(--card);border:1px solid var(--line);border-radius:12px;
+        padding:15px 18px;margin-bottom:11px}
+  .item .ih{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
+  .item .id{font-family:var(--mono);font-size:12.5px;color:var(--muted);font-weight:700}
+  .item .ti{font-weight:600;font-size:15.5px}
+  .item .sc{font-size:12px;padding:2px 8px;border-radius:5px;margin-left:auto}
+  .item.hi .sc{background:var(--high-soft);color:var(--high)}
+  .item.md .sc{background:var(--med-soft);color:var(--med)}
+  .item.lo .sc{background:var(--low-soft);color:var(--low)}
+  .item p{margin:9px 0 0}
+  .item .lbl{color:var(--muted);font-size:13px;display:block;margin:11px 0 4px;letter-spacing:.02em}
+  .ev{background:#f6f1e6;border:1px solid var(--line);border-radius:8px;padding:9px 12px;
+      font-family:var(--mono);font-size:12.4px;line-height:1.62;overflow-x:auto;white-space:pre;color:#3c352b}
+  .ev .ln{color:var(--accent);font-weight:700}
+  .item ul{margin:6px 0 0;padding-left:22px}
+  .item li{margin:2px 0}
+  .fix{background:#eef4ee;border-left:3px solid var(--low);border-radius:0 7px 7px 0;
+       padding:8px 13px;margin-top:9px;font-size:14px}
+  .fix b{color:var(--ok)}
+  .vfmark{font-size:12px;color:var(--ok);border:1px solid #c7dbc9;background:#eef4ee;
+          border-radius:5px;padding:1px 7px;white-space:nowrap}
+
+  table.t{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:10px}
+  table.t th,table.t td{border:1px solid var(--line);padding:7px 10px;text-align:left;vertical-align:top}
+  table.t th{background:#f2ece0;font-weight:600;color:var(--ink-2);white-space:nowrap}
+  table.t td.c{text-align:center;white-space:nowrap}
+  .no{color:var(--muted)}
+  .yes{color:var(--ok);font-weight:600}
+  footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--line);
+         color:var(--muted);font-size:13px}
+  @media (max-width:620px){ .wrap{padding:24px 14px 60px} h1{font-size:21px} .item .sc{margin-left:0} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <h1>观梅 · Plumora 代码审查报告 <span class="sub">— 首轮全量代码审查</span></h1>
+  <table class="meta">
+    <tr><th>审查对象</th><td><code>D:/hxzhang/MyGithubSoftware/Plumora</code>（npm workspaces monorepo：<code>packages/knowledge</code> · <code>packages/core</code> · <code>packages/lunar</code> · <code>apps/web</code> · <code>scripts/</code> · <code>docs/</code>）</td></tr>
+    <tr><th>审查日期</th><td>2026-09-25</td></tr>
+    <tr><th>审查范围</th><td>全部源码 + 测试 + 构建配置 + Windows 脚本 + 设计文档一致性 + UI 原型。共 4 路并行分审（core 领域层 / Web 应用层 / 构建与测试基建 / 文档与实现一致性），HIGH 级结论由主审逐条独立复核</td></tr>
+    <tr><th>验证基线</th><td><code>npm run verify</code> <b>exit 0</b>（版本一致性 v0.1.0 六目标对齐 → 类型检查 → 114 单测 <span class="no">core 65 / knowledge 16 / lunar 21 / web 12</span> → 7 条运行时冒烟全 ok、零运行时错误）；三个文档自查脚本 22 / 32 / 64 项全过；UI 原型 jsdom 冒烟 30 pass / 0 fail</td></tr>
+    <tr><th>工作区状态</th><td>29 项未提交（整个 <code>apps/</code>、<code>packages/</code>、<code>scripts/</code>、<code>start.*</code> 均为未跟踪；<code>review-2026-09-25.md</code> 已移动到 <code>docs/</code>）</td></tr>
+    <tr><th>上轮产物</th><td><code>docs/review-2026-09-25.md</code> —— 那是**文档目录核查**（25 条，声称已全部修订），不是代码审查。本报告为**首轮代码审查**，并复核了上轮结论是否仍成立</td></tr>
+  </table>
+</header>
+
+<h2>一、统计与总体结论</h2>
+
+<div class="cards">
+  <div class="card crit"><div class="n">0</div><div class="k">CRITICAL</div></div>
+  <div class="card hi"><div class="n">10</div><div class="k">HIGH</div></div>
+  <div class="card md"><div class="n">18</div><div class="k">MEDIUM</div></div>
+  <div class="card lo"><div class="n">16</div><div class="k">LOW</div></div>
+  <div class="card vf"><div class="n">10 / 10</div><div class="k">HIGH 已主审独立复核</div></div>
+</div>
+
+<div class="verdict">
+  <p><b>骨架是可信的，问题集中在「边界口径」与「状态真源」两类。</b>核心算法（取余余 0 取 8/6、互卦二三四/三四五、变卦、体用两流派、五行生克 25 组合矩阵）经穷举与真实代码对拍无错漏；知识库 64 卦齐全无重、关键词 1–5 条无空值；依赖方向正确（core→knowledge，lunar→core 端口注入，无反向污染）；「完全离线、无外部请求」这条硬性合规要求**实测通过**——全仓源码无 <code>fetch</code> / <code>XMLHttpRequest</code> / <code>WebSocket</code> / 遥测 / 第三方字体 CDN。</p>
+  <p><b>但有一条会直接动摇结果可信度：</b>时间起卦的**显示标签**与**实际算法**用了两套「年」的口径（立春干支年 vs 农历年），每年约 13 天里，用户按界面上显示的干支手算会得到与 App 不同的卦。同时该错误标签会永久落库（<code>lunarLabel</code>）。</p>
+  <p><b>另一类是系统性的：</b>Web 端把「模态框开合状态」放在被 KeepAlive 缓存的组件里、把「起卦方式」同时存在组件 <code>ref</code> 与全局设置里——已实测复现「删除弹窗跨路由残留并锁死页面滚动」「改默认起卦方式后起卦页不回显、且点一下选择器会静默改回设置」。这两类都不是单点失误，而是「同一份状态有两个主人」的重复模式。</p>
+  <p><b>门禁方面：</b><code>npm run verify</code> 的每一环都经注入验证确实会失败（版本漂移 4 种注入全部 exit 1、<code>IDB_STUB_SELFTEST=1</code> 确实让断言 FAIL），不存在恒真断言；<b>但它从不执行生产构建</b>——<code>vite.config.ts</code> 与 <code>index.html</code> 坏掉仍会全绿。此外无 CI、无 LICENSE、无 lint。</p>
+</div>
+
+<h2>二、上轮（文档核查）结论复核</h2>
+<p>上轮 25 条（P0×4 + P1×20 + 结构性×4）的修订结论<b>今天仍然成立</b>：互卦口径（03 §2.3/§3.4、01 §六、07 §2.2 均为水山蹇 / 火泽睽）、<code>binary: 22</code>、删除「文档集版本」字段、NFR-02 引用修正、03 §七 摘要表删除——均未回退。</p>
+<p>但上轮之后文档又经历多轮改动，<b>引入了新的不一致</b>，且上轮建立的自查脚本存在结构性盲区（对拍的是「原型」而非「交付实现」）：</p>
+<table class="t">
+  <tr><th>复核项</th><th>结论</th><th>证据</th></tr>
+  <tr><td>上轮 25 条修订</td><td class="yes">未回退</td><td>逐条比对 03/01/07 关键值</td></tr>
+  <tr><td>单文件原型内联算法与 <code>build/core.js</code> 同步</td><td class="yes">已同步</td><td>逐字节比对，相似度 1.0000</td></tr>
+  <tr><td>原型与<b>交付实现</b>口径一致</td><td style="color:var(--high)">新增漂移</td><td>见 <b>D-1</b>：闰月标签原型拼出「闰闰六月」，交付实现有测试断言 <code>not.toContain('闰闰')</code></td></tr>
+  <tr><td><code>.docx</code> 副本</td><td style="color:var(--high)">整体过期</td><td>见 <b>D-2</b>：7 份仍含已修订的 P0 错值「山水蒙」</td></tr>
+  <tr><td>07 测试计划的用例号均有实现</td><td style="color:var(--high)">不成立</td><td>见 <b>D-3</b>：TC-D01–D07 / TC-W12 / TC-ST05 / TC-KW02 无实现；NFR-05 的「200 条对拍」从未做过</td></tr>
+  <tr><td>索引「当前版本」列与各文档一致</td><td style="color:var(--med)">部分滞后</td><td>见 <b>D-8</b>：附属表把 <code>ui/README.md</code> 记为 v1.1（实为 v1.2）</td></tr>
+</table>
+
+<h2>三、问题清单</h2>
+
+<div class="filters">
+  <button class="fbtn on" data-f="all">全部 44</button>
+  <button class="fbtn" data-f="hi">HIGH 10</button>
+  <button class="fbtn" data-f="md">MEDIUM 18</button>
+  <button class="fbtn" data-f="lo">LOW 16</button>
+</div>
+
+<!-- ================= HIGH ================= -->
+<div class="grp" data-g="hi">
+  <div class="gh"><span class="tag hi">HIGH</span><span class="no">10 条 · 全部经主审独立复核</span></div>
+
+  <div class="item hi">
+    <div class="ih"><span class="id">C-1</span><span class="ti">时间起卦：显示标签用「立春干支年」、算法用「农历年支」，两套口径每年约 13 天互相矛盾</span><span class="sc">HIGH</span></div>
+    <span class="lbl">证据</span>
+    <div class="ev"><span class="ln">packages/core/src/casters.ts:99</span>
+  const yearBranchNo = ((((lu.lYear - 4) % 12) + 12) % 12) + 1;   // 农历年 → 年支序数
+<span class="ln">packages/core/src/casters.ts:104</span>
+  label: `${lu.gzYear}年 ${lu.monthCn}${lu.dayCn} ...`            // 立春干支年 → 标签
+<span class="ln">docs/dev/03-起卦核心算法设计.md:67</span>
+  | 年数 Y | 农历年**地支序数**：子=1，丑=2，……，亥=12 |</div>
+    <span class="lbl">主审独立复算（solarlunar 实跑，非采信分审）</span>
+    <div class="ev">2026-02-10  gzYear=丙午(支序7)  lYear=2025(支序6)  一致=false   label="丙午年 腊月廿三"  应为"乙巳年"
+2025-01-29  gzYear=甲辰(支序5)  lYear=2025(支序6)  一致=false   label="甲辰年 正月初一"  应为"乙巳年"
+2026-01-20  gzYear=乙巳(支序6)  lYear=2025(支序6)  一致=true
+2026-09-25  gzYear=丙午(支序7)  lYear=2026(支序7)  一致=true</div>
+    <p>后果链：① 2026-02-10 界面写「丙午年」，用户按午=7 手算得 S1=42 → 兑；App 用巳=6 算得 S1=41 → 乾。**同一卦两个答案**，用户会判定算错。② 2025-01-29 的标签「甲辰年 正月初一」本身荒谬——甲辰年的正月初一在 2024-02-10。③ <code>lunarLabel</code> 是落库列（04 §2.2），错误标签永久保存，卦例详情页无法复盘。④ 触发窗口每年固定（约 13 天），不是极端巧合。</p>
+    <div class="fix"><b>修复：</b>把 <code>label</code> 改为由 <code>lYear</code> 派生干支年（与算法同源），并把「年支口径 = 农历年地支序数，非立春」写进 <code>packages/core/src/lunar.ts</code> 的端口注释；同时补一条跨立春边界的金标准用例。</div>
+    <p style="margin-top:9px"><span class="vfmark">主审独立复核 ✓</span> <span class="no" style="font-size:12.5px">注：分审将其列为「疑似待确认·口径是否为本意」；主审查 03 §2.1/§6.2 后确认文档口径明确，故判为标签错。</span></p>
+  </div>
+
+  <div class="item hi">
+    <div class="ih"><span class="id">W-1</span><span class="ti">删除确认弹窗跨路由残留：遮罩盖住列表页且页面滚动被永久锁死</span><span class="sc">HIGH</span></div>
+    <span class="lbl">证据</span>
+    <div class="ev"><span class="ln">apps/web/src/App.vue:98-100</span>
+&lt;KeepAlive&gt;&lt;component :is="view" :key="viewKey" /&gt;&lt;/KeepAlive&gt;   // record-detail 的 key = route.path
+<span class="ln">apps/web/src/views/RecordDetailView.vue:26-28</span>
+const confirmDelete = ref(false);            // ← 模态开合状态放在被缓存的组件里
+<span class="ln">apps/web/src/components/ConfirmDialog.vue:29-36</span>
+watch(() => props.open, (v) =&gt; { document.body.style.overflow = v ? 'hidden' : ''; });  // 只在 open 变化时复位
+onBeforeUnmount(() =&gt; { ... document.body.style.overflow = ''; });   // KeepAlive 只 deactivate，不 unmount → 永不执行</div>
+    <span class="lbl">主审独立复跑（自建 jsdom harness + 项目自带 idb-stub，未复用分审脚本）</span>
+    <div class="ev">进入详情页      body.overflow=""       alertdialog在DOM=false  记录数=0
+点删除后        body.overflow="hidden"   alertdialog在DOM=true   记录数=0
+后退到列表页     body.overflow="hidden"   alertdialog在DOM=true   记录数=1   ← 已在列表页，弹窗仍在
+重新进入详情页    body.overflow="hidden"   alertdialog在DOM=true   记录数=0   ← 弹窗自己又弹出来</div>
+    <p>后果链：用户在详情页点「删除」→ 手机侧滑返回 / 浏览器后退（Android 返回键是极常见操作）→ 回到列表页却看到删除弹窗浮在上面、页面滚不动。再进同一条卦例，弹窗会自动弹出。</p>
+    <div class="fix"><b>修复：</b>在 <code>RecordDetailView</code> 的 <code>onDeactivated</code> 里复位 <code>confirmDelete = false</code>；<code>ConfirmDialog</code> 补 <code>onDeactivated</code> 复位 <code>body.overflow</code>；或把弹窗 <code>open</code> 提升到 App / 路由级（脱离 KeepAlive 缓存范围）。</div>
+    <p style="margin-top:9px"><span class="vfmark">主审独立复核 ✓</span></p>
+  </div>
+
+  <div class="item hi">
+    <div class="ih"><span class="id">W-2</span><span class="ti">残留弹窗上按 Enter 仍会执行删除流程，<code>id=NaN</code> 导致静默空操作且无任何反馈</span><span class="sc">HIGH</span></div>
+    <span class="lbl">证据</span>
+    <div class="ev"><span class="ln">apps/web/src/components/ConfirmDialog.vue:19-23</span>
+function onKey(e) {
+  if (!props.open) return;
+  if (e.key === 'Escape') emit('cancel');
+  if (e.key === 'Enter') emit('confirm');      // 挂在 window 上，不看焦点在哪
+}
+<span class="ln">apps/web/src/views/RecordDetailView.vue:34,114-120</span>
+const id = computed(() =&gt; Number(route.value.params.id));   // 列表路由下 params.id 为 undefined → NaN
+async function doDelete() { confirmDelete.value = false; await deleteRecord(id.value); ... }</div>
+    <span class="lbl">主审独立复跑</span>
+    <div class="ev">列表页 弹窗在DOM=true  删除前记录数=1
+按Enter后 弹窗还在=false  记录数=1  toast=[]     ← 弹窗关掉了、记录没删、无任何提示
+运行时错误: 无（未处理拒绝、console.error 均为 0）</div>
+    <p>后果链：用户在列表页看到残留弹窗，按 Enter「确认删除」→ 弹窗消失、记录仍在、无提示。用户以为删掉了。</p>
+    <div class="fix"><b>修复：</b><code>onKey</code> 只在事件目标是弹窗内部时处理（或改为监听 dialog 元素而非 window）；<code>doDelete</code> 开头对 <code>id</code> 做 <code>Number.isInteger</code> 校验并给失败提示。</div>
+    <p style="margin-top:9px"><span class="vfmark">主审独立复核 ✓</span> <span class="no" style="font-size:12.5px">分审另称此处会弹「已删除」假成功提示 —— 主审复跑时该 toast 未出现（<code>toast=[]</code>），故该细节<b>不计入</b>本报告，仅保留已确证的「静默无反馈」。</span></p>
+  </div>
+
+  <div class="item hi">
+    <div class="ih"><span class="id">W-3</span><span class="ti">起卦方式双真源：改设置后起卦页不回显，且点一下选择器会静默改回设置</span><span class="sc">HIGH</span></div>
+    <span class="lbl">证据</span>
+    <div class="ev"><span class="ln">apps/web/src/views/CastView.vue:42</span>
+const method = ref&lt;CastMethod&gt;(settings.defaultCastMethod);   // 只在 setup 求值一次
+<span class="ln">apps/web/src/views/CastView.vue:47-51</span>
+function setMethod(m: CastMethod) {
+  method.value = m;
+  updateSetting('defaultCastMethod', m);   // 反向写回设置
+}
+// CastView 被 KeepAlive 缓存（App.vue viewKey 取 route.name）→ setup 不再执行</div>
+    <span class="lbl">分审实跑（机制经主审读源确认）</span>
+    <div class="ev">设置里把「默认起卦方式」改成「汉字」→ localStorage.defaultCastMethod="CHARACTER"
+回到起卦页 → [时间* 数字 汉字 声音]   ← 起卦页仍停在「时间」，而设置面板里已是「汉字*」</div>
+    <p>后果链：用户改默认方式后回起卦页看不到变化，以为设置没生效；更糟的是用户随后点一下「时间」，<code>setMethod</code> 立刻把设置静默改回 <code>TIME</code>，覆盖用户的设置。</p>
+    <div class="fix"><b>修复：</b>改为 <code>computed({ get: () =&gt; settings.defaultCastMethod, set: v =&gt; updateSetting('defaultCastMethod', v) })</code>，让选择器直接绑设置（单一真源）；或至少 <code>onActivated</code> 时同步一次。</div>
+    <p style="margin-top:9px"><span class="vfmark">主审读源确认 ✓</span></p>
+  </div>
+
+  <div class="item hi">
+    <div class="ih"><span class="id">W-4</span><span class="ti">详情页 <code>load()</code> / <code>doDelete()</code> 无 try/catch → 存储不可用时未处理拒绝 + 白屏死路</span><span class="sc">HIGH</span></div>
+    <span class="lbl">证据</span>
+    <div class="ev"><span class="ln">apps/web/src/views/RecordDetailView.vue:37-50</span>
+async function load() {
+  const rec = await getRecord(id.value);      // 无 try/catch
+  if (!rec) { notFound.value = true; return; }
+  ...
+}
+void load();                                   // ← 拒绝被吞成 unhandledrejection
+<span class="ln">apps/web/src/views/RecordDetailView.vue:114-120</span>
+async function doDelete() { ... await deleteRecord(id.value); ... }   // 同样无 try/catch
+<span class="ln">对比：apps/web/src/stores/records.ts:21-23（列表页是 catch 的）</span>
+catch (e) { lastError.value = ...; records.value = []; }</div>
+    <p>后果链：隐私模式 / 站点数据被禁 → IndexedDB 不可用 → 详情页只剩页头一个返回箭头（<code>notFound</code> 与 <code>resolved &amp;&amp; record</code> 都不成立），用户无错误提示也点不到「返回列表」；同一故障在列表页却会正常显示错误卡——两个页面行为不一致。</p>
+    <div class="fix"><b>修复：</b><code>load()</code>/<code>doDelete()</code> 包 try/catch，失败时置错误态并复用列表页的错误卡样式；或复用 <code>lastError</code> 通道。</div>
+    <p style="margin-top:9px"><span class="vfmark">主审读源确认 ✓</span></p>
+  </div>
+
+  <div class="item hi">
+    <div class="ih"><span class="id">I-1</span><span class="ti"><code>npm run verify</code> 从不执行生产构建 → <code>vite.config.ts</code> / <code>index.html</code> 坏掉也全绿</span><span class="sc">HIGH</span></div>
+    <span class="lbl">证据</span>
+    <div class="ev"><span class="ln">package.json:24</span>
+"verify": "npm run version:check &amp;&amp; npm run typecheck &amp;&amp; npm run test &amp;&amp; npm run test:runtime"
+<span class="ln">apps/web/package.json:13</span>
+"test:runtime": "vite build --config vite.smoke.config.ts &amp;&amp; node scripts/runtime-smoke.cjs"
+   ↑ lib/IIFE 模式，与真实发布用的 `vite build`（vite.config.ts 的 base:'./'、appVersionPlugin、index.html 路径重写）是两条链路</div>
+    <p>后果链：改坏 <code>vite.config.ts</code>（插件抛错、<code>base</code> 写错）或 <code>index.html</code>（漏 <code>/</code>、标签写坏）→ <code>verify</code> 全绿 → 直到部署/发版才发现白屏或资源 404。旁证：审查开始时 <code>apps/web/dist/</code> 里残留 <code>mark-1024.png</code>，而 <code>public/</code> 中已无此文件——产物陈旧，说明门禁期间没人构建过。</p>
+    <div class="fix"><b>修复：</b><code>verify</code> 末尾加 <code>&amp;&amp; npm run build</code>；更省时的做法是在 <code>runtime-smoke.cjs</code> 里加一条对 <code>dist/index.html</code> 的断言（重写后不应残留 <code>href="/</code>）。</div>
+    <p style="margin-top:9px"><span class="vfmark">主审读源确认 ✓</span></p>
+  </div>
+
+  <div class="item hi">
+    <div class="ih"><span class="id">I-2</span><span class="ti"><code>scripts/version.mjs</code> 的 gradle 分支缺 pattern 守卫 → 字段缺失时静默通过（Android 版本号将失管）</span><span class="sc">HIGH</span></div>
+    <span class="lbl">证据</span>
+    <div class="ev"><span class="ln">scripts/version.mjs:103-108（packageJson 分支：有守卫）</span>
+const re = /^(\s*"version"\s*:\s*)"[^"]*"/m;
+if (!re.test(current)) fail(`${target.file} 里找不到 "version" 字段`);   // ← 有校验
+<span class="ln">scripts/version.mjs:110-114（gradle 分支：无守卫）</span>
+case 'gradle': {
+  let out = current.replace(/(versionName\s*=\s*)"[^"]*"/, `$1"${version}"`);
+  out = out.replace(/(versionCode\s*=\s*)\d+/, `$1${code}`);
+  return out;                       // ← 没匹配上就原样返回，check 认为「一致」
+}</div>
+    <p>后果链：<code>apps/android/</code> 一旦建立，若 <code>build.gradle.kts</code> 里版本字段改名（<code>version_name</code>）或缺失，<code>version:check</code> 会报「全部对齐」，Android 版本号从此失管——而「Web / Android 共用一个版本号」正是这套体系存在的唯一理由。配合 <code>discoverTargets</code> 的 <code>optional: true</code>（文件缺失时 <code>continue</code>），Android 目录存在但文件没建好时同样不报错。</p>
+    <div class="fix"><b>修复：</b>gradle 分支照抄 <code>packageJson</code> 的守卫，例如 <code>if (!/versionName/.test(current) || !/versionCode/.test(current)) fail(...)</code>。</div>
+    <p style="margin-top:9px"><span class="vfmark">主审读源确认 ✓</span></p>
+  </div>
+
+  <div class="item hi">
+    <div class="ih"><span class="id">D-1</span><span class="ti">UI 原型闰月标签拼出「闰闰六月」，与交付实现相悖；三个自查脚本全都测不到</span><span class="sc">HIGH</span></div>
+    <span class="lbl">证据</span>
+    <div class="ev"><span class="ln">docs/ui/build/core.js:84（原型）</span>
+label: lu.gzYear + "年 " + (lu.isLeap ? "闰" : "") + lu.monthCn + lu.dayCn + ...
+<span class="ln">packages/core/src/casters.ts:102-104（交付实现，注释明写原因）</span>
+// monthCn 已含「闰」前缀（如「闰四月」），此处不再拼接，避免出现「闰闰四月」
+label: `${lu.gzYear}年 ${lu.monthCn}${lu.dayCn} ...`
+<span class="ln">packages/lunar/test/lunar.test.ts:50（交付实现有断言）</span>
+expect(...).not.toContain('闰闰')      // 原型无此断言</div>
+    <span class="lbl">主审独立复跑</span>
+    <div class="ev">solarlunar 原始值: monthCn=闰六月  isLeap=true  gzYear=乙巳
+原型 core.js 口径 label = "乙巳年 闰闰六月初八"     ← 病
+交付实现口径 label      = "乙巳年 闰六月初八"
+原型 castByTime(2025-08-01 12:30) label = "乙巳年 闰闰六月初八 午时"   ← 单文件 HTML 内联同一份代码，同样带病</div>
+    <p>后果链：单文件 HTML 内联同一份 <code>core.js</code>（逐字节比对相似度 1.0000），演示原型在闰月会显示「闰闰六月」；<code>doc-case-check.js</code> 无闰月用例、原型冒烟也不覆盖 → 永久漏网。这是「改了 <code>packages/core</code> 却忘了同步原型」的反向漂移。</p>
+    <div class="fix"><b>修复：</b><code>docs/ui/build/core.js:84</code> 改为直接拼 <code>lu.monthCn</code>（与交付实现同源），同步重新打包单文件 HTML；并在 <code>doc-case-check.js</code> 增一条闰月用例。</div>
+    <p style="margin-top:9px"><span class="vfmark">主审独立复核 ✓</span></p>
+  </div>
+
+  <div class="item hi">
+    <div class="ih"><span class="id">D-2</span><span class="ti"><code>.docx</code> 副本整体过期，7 份仍携带已修订的 P0 错值「山水蒙」</span><span class="sc">HIGH</span></div>
+    <span class="lbl">证据（主审独立解包 <code>word/document.xml</code> 逐份扫描）</span>
+    <div class="ev">01-产品需求文档PRD.docx   命中: ['山水蒙']
+03-起卦核心算法设计.docx   命中: ['山水蒙']
+05-卦象知识库设计.docx     命中: ['山水蒙']
+06-UI-UX设计规范.docx     命中: ['山水蒙']
+README.docx             命中: ['山水蒙', '文档集版本']     ← 「文档集版本」字段上轮已删除
+手写笔记识读记录.docx       命中: ['山水蒙', '水火未济']
+（mtime 均 14:46–14:49，对应 .md 已改到 15:48–17:09）</div>
+    <p>后果链：<code>docs/</code> 下 docx 与 md 同名并存，会被当成同一份契约的两种格式分发；拿到 docx 的实现者会照抄上轮已判定为错的互卦口径。</p>
+    <div class="fix"><b>修复：</b>重新导出全部 docx；或在 <code>docs/</code> 顶部声明「docx 仅为导出快照，以 md 为准」并把 docx 移出契约范围（若这些 docx 不对外分发，本条可降为 LOW）。</div>
+    <p style="margin-top:9px"><span class="vfmark">主审独立复核 ✓</span></p>
+  </div>
+
+  <div class="item hi">
+    <div class="ih"><span class="id">D-3</span><span class="ti">07 测试计划多条用例号无实现；NFR-05 承诺的「农历对拍 200 条」从未做过</span><span class="sc">HIGH</span></div>
+    <span class="lbl">证据</span>
+    <div class="ev"><span class="ln">docs/dev/07-测试计划.md:143-160</span>  TC-D01–TC-D07（增删改查 / 搜索 / enforceRecordLimit / 回放）
+<span class="ln">packages/core/test/record.test.ts</span>  只实现 TC-D08–D16（9 项），无 D01–D07
+<span class="ln">docs/dev/07-测试计划.md:181</span>  TC-W12「路由解析与导航」
+<span class="ln">apps/web/test/smoke.test.ts</span>  无任何 router/navigate 测试
+      （文件头却自称「验证 Web 端的『非渲染逻辑』——路由、设置持久化、导出纯函数、排盘暂存」）
+<span class="ln">docs/dev/07-测试计划.md:122 / 269 与 01-产品需求文档PRD.md（NFR-05）</span>
+      「抽样 200 条」「农历对拍 200 条零差异」
+<span class="ln">packages/lunar/test/lunar.test.ts:94-114</span>  实际只有 5 个春节 + 1 个除夕 = 6 个样本</div>
+    <p>后果链：07 是契约，<code>01</code> 的 NFR-05「农历转换必须经过百年对拍测试」与 <code>07 §六 DoD</code> 第 2 条据此判定「通过」，实际只有 6 个样本——红线门禁形同虚设；TC-D01–D06（IndexedDB 增删改查 / 搜索 / 保留上限裁剪）无任何自动化护栏。</p>
+    <div class="fix"><b>修复：</b>补齐用例或把未实现的用例号从文档删除；「200 条」要么真跑，要么把 NFR-05 与 DoD 降级为「金标准日期 + 春节抽查」并写明实际样本量。</div>
+    <p style="margin-top:9px"><span class="vfmark">主审独立复核 ✓</span></p>
+  </div>
+</div>
+
+<!-- ================= MEDIUM ================= -->
+<div class="grp" data-g="md">
+  <div class="gh"><span class="tag md">MEDIUM</span><span class="no">18 条</span></div>
+
+  <div class="item md">
+    <div class="ih"><span class="id">C-2</span><span class="ti">卦代码未按文档补零：实现是 <code>6-5</code>，文档三处写 <code>06-05</code></span><span class="sc">MEDIUM</span></div>
+    <span class="lbl">证据</span>
+    <div class="ev"><span class="ln">packages/knowledge/src/hexagrams.ts:50-59,68</span>  RAW 键为 '6-5'，build() 里 code: code
+<span class="ln">docs/dev/04-数据模型与存储设计.md:50</span>  | benGuaCode | String | NOT NULL, 索引 | ... 如「06-05」 |
+<span class="ln">docs/dev/04-数据模型与存储设计.md:119</span>  统一为 `上卦数-下卦数`（如水风井 = `06-05`）
+<span class="ln">docs/dev/05-卦象知识库设计.md:72</span>  "code": "06-05",</div>
+    <p>后果链：<code>benGuaCode</code> 是落库且带索引的列，并按 04 §四导出为 Android <code>assets/knowledge/*.json</code>。按文档实现的另一端会与 Web 端筛选 / 联查全部 miss。</p>
+    <div class="fix"><b>修复：</b>统一补零或改文档，并同步 <code>golden.test.ts</code> 与原型。</div>
+    <p style="margin-top:9px"><span class="vfmark">主审读源确认 ✓</span></p>
+  </div>
+
+  <div class="item md">
+    <div class="ih"><span class="id">C-3</span><span class="ti">繁体模式无法用繁体字面查笔画（05 §4.1 schema 明确把「觀」列为键）</span><span class="sc">MEDIUM</span></div>
+    <span class="lbl">证据</span>
+    <div class="ev"><span class="ln">packages/knowledge/src/strokes.ts:27</span>
+观: { s: 6, t: 25 },          // 表键全部是简体字面；grep 觀|藥|書|門 → 0 命中
+<span class="ln">packages/knowledge/src/strokes.ts:57-62</span>
+const entry = STROKES[char];
+if (!entry) { ... return null; }     // lookupStrokes('觀','TRADITIONAL') → null
+<span class="ln">docs/dev/05-卦象知识库设计.md §4.1</span>
+"strokes": { "梅": 11, "花": 8, "觀": 25, "观": 6 }    ← schema 把两者都列为键</div>
+    <p>后果链：繁体模式下用户输入繁体字（最自然行为）一律「未收录」→ 逐字弹手动输入框，批量体验崩塌。</p>
+    <div class="fix"><b>修复：</b>补繁体字面键（<code>觀: { s: 25, t: 25 }</code> 之类）；或在 05 §4.1 明确「表键一律为简体字面，繁体笔画走 <code>t</code> 字段」，并同步修 schema 示例。<span class="no">（用 <code>t</code> 字段承载繁体笔画本身是合理设计，问题在于文档 schema 与实现不一致。）</span></div>
+    <p style="margin-top:9px"><span class="vfmark">主审读源确认 ✓</span></p>
+  </div>
+
+  <div class="item md">
+    <div class="ih"><span class="id">C-4</span><span class="ti">闰月测试断言恒真：功能坏了测试仍然通过</span><span class="sc">MEDIUM</span></div>
+    <span class="lbl">证据</span>
+    <div class="ev"><span class="ln">packages/lunar/test/lunar.test.ts:123-128</span>
+it('闰月按本月份数（03 §6.1），月名含「闰」前缀且只含一个', () =&gt; {
+  const lu = solarlunarProvider.solar2lunar(2025, 8, 1);
+  expect(lu!.monthCn.startsWith('闰') ? lu!.monthCn.match(/闰/g)!.length : 1).toBe(1);
+});        // ↑ 若 monthCn 不以「闰」开头（功能已坏）→ 三元取 1 → 断言仍通过
+// 全测无一处断言 lMonth === 6</div>
+    <p>后果链：03 §6.1 的核心裁定（闰月按本月份数）零覆盖。若 Android 换 lunar-java（其闰月 <code>getMonth()</code> 返回<b>负数</b>）而 core 未兜底，<code>castByTimeParts</code> 会抛「农历月日超出范围：-4 月」→ 整个闰月无法起卦。</p>
+    <div class="fix"><b>修复：</b>改为直接断言 <code>lMonth === 6</code> / <code>monthCn === '闰六月'</code> / <code>isLeap === true</code>；core 侧对 <code>lMonth</code> 取绝对值并校验。</div>
+    <p style="margin-top:9px"><span class="vfmark">主审读源确认 ✓</span></p>
+  </div>
+
+  <div class="item md">
+    <div class="ih"><span class="id">W-5</span><span class="ti"><code>openDatabase</code> 的 promise reject 后永久污染；<code>onblocked</code> 早退丢弃已成功的连接</span><span class="sc">MEDIUM</span></div>
+    <span class="lbl">证据</span>
+    <div class="ev"><span class="ln">apps/web/src/platform/records.ts:19-43</span>
+let dbPromise: Promise&lt;IDBDatabase&gt; | null = null;      // 模块级缓存
+...
+req.onblocked = () =&gt; reject(new Error('IndexedDB 被其他标签页占用...'));
+// 无 .catch(() =&gt; { dbPromise = null })；onblocked 后若 onsuccess 仍触发，resolve 成为空操作 → 连接被丢弃且永不关闭</div>
+    <p>后果链：任一打开失败（隐私模式 / 站点数据被禁 / onerror）→ 之后每次读写都复用同一个已 reject 的 promise，用户永久看到「读取卦例失败」直到手动刷新；版本升级时若另一标签页占用，即便对方关掉也无法自愈。</p>
+    <div class="fix"><b>修复：</b><code>.catch</code> 里把 <code>dbPromise</code> 置回 <code>null</code>；<code>onblocked</code> 只做提示、不要 reject。</div>
+  </div>
+
+  <div class="item md">
+    <div class="ih"><span class="id">W-6</span><span class="ti">CSV 公式注入未中和</span><span class="sc">MEDIUM</span></div>
+    <span class="lbl">证据</span>
+    <div class="ev"><span class="ln">apps/web/src/platform/records.ts:177-180</span>
+const esc = (v) =&gt; {
+  const s = v == null ? '' : String(v);
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;    // 不处理以 = + - @ 开头的值
+};
+// 分审实跑复刻： "=cmd|' /C calc'!A0" → 原样输出</div>
+    <p>后果链：用户在「备注 / 所问之事」填 <code>=cmd|' /C calc'!A0</code> → 导出 CSV → 在 Excel 打开（或把文件发给别人打开）→ 触发 DDE / 公式执行。CSV 的引号只是字段分隔转义，Excel 仍会把 <code>"=..."</code> 当公式求值。</p>
+    <div class="fix"><b>修复：</b><code>esc</code> 里对 <code>^[=+\-@\t\r]</code> 的值前缀一个 <code>'</code>，再做引号转义。</div>
+  </div>
+
+  <div class="item md">
+    <div class="ih"><span class="id">W-7</span><span class="ti">设置抽屉关闭态仍留在 DOM 且可被 Tab 聚焦（含「清空全部卦例」）</span><span class="sc">MEDIUM</span></div>
+    <span class="lbl">证据</span>
+    <div class="ev"><span class="ln">apps/web/src/components/SettingsPanel.vue:128-136,224-241</span>
+&lt;aside class="panel" :class="{ open }"&gt;      // 关闭态只是 transform: translateX(102%)
+// 无 visibility:hidden / display:none / inert / aria-hidden</div>
+    <span class="lbl">分审实跑（面板未打开时的控件可见性）</span>
+    <div class="ev">时间* 数字 汉字 声音 简体* 繁体 时间* 数字 汉字 声音 动爻所在为用（通行）* ... 不限制* 500 条 1000 条</div>
+    <p>后果链：键盘用户 Tab 穿过起卦页时会「消失」到屏幕外，并可聚焦到「清空全部卦例」这类破坏性按钮。</p>
+    <div class="fix"><b>修复：</b>关闭态加 <code>inert</code>（或 <code>visibility:hidden</code>）并配 <code>aria-hidden</code>。</div>
+  </div>
+
+  <div class="item md">
+    <div class="ih"><span class="id">W-8</span><span class="ti">表单 label 与控件未关联；SegControl 的 ARIA tabs 用法不成立</span><span class="sc">MEDIUM</span></div>
+    <span class="lbl">证据</span>
+    <div class="ev"><span class="ln">apps/web/src/views/CastView.vue:335,339,343,369,373,397,402</span>
+&lt;label&gt;农历月&lt;/label&gt;      // 既无 for 也未包裹 input → 点 label 不聚焦、屏幕阅读器不播报
+<span class="ln">apps/web/src/components/SettingsPanel.vue:140,145,150,158,163</span>  同样孤立，且 5 个 SegControl 都没传 aria-label
+<span class="ln">apps/web/src/components/SegControl.vue:16,21</span>
+role="tablist" / role="tab"    // 无 tabpanel、无方向键漫游 tabindex，不符 WAI-ARIA tabs 模式
+对比：ResultView.vue / RecordDetailView.vue 是正确写法（label for + input id），前后不一致</div>
+    <div class="fix"><b>修复：</b>label 用 <code>for/id</code> 或包裹；SegControl 要么补齐 tabs 语义（tabpanel + 方向键），要么改成 <code>role="radiogroup"</code> + <code>aria-checked</code>。</div>
+  </div>
+
+  <div class="item md">
+    <div class="ih"><span class="id">W-9</span><span class="ti">列表页错误态与空态同时渲染，文案自相矛盾</span><span class="sc">MEDIUM</span></div>
+    <span class="lbl">证据</span>
+    <div class="ev"><span class="ln">apps/web/src/views/RecordsView.vue:93-97</span>
+&lt;p v-if="lastError" class="error"&gt;读取卦例失败：{{ lastError }}&lt;/p&gt;
+&lt;div v-if="!filtered.length" class="empty"&gt;{{ records.length ? '无匹配卦例' : '还没有卦例，去「起卦」试试' }}&lt;/div&gt;
+<span class="ln">apps/web/src/stores/records.ts:23</span>  出错时 records.value = []  → filtered 也为空</div>
+    <p>后果链：读库失败时页面同时显示「读取卦例失败：…」和「还没有卦例，去「起卦」试试」——用户以为数据丢了。</p>
+    <div class="fix"><b>修复：</b><code>lastError</code> 非空时不渲染空态。</div>
+  </div>
+
+  <div class="item md">
+    <div class="ih"><span class="id">W-10</span><span class="ti">列表项 <code>role="button"</code> 只处理 Enter，未处理 Space</span><span class="sc">MEDIUM</span></div>
+    <span class="lbl">证据</span>
+    <div class="ev"><span class="ln">apps/web/src/views/RecordsView.vue:100-108</span>
+@click="navigate(`/records/${r.id}`)" @keydown.enter="navigate(`/records/${r.id}`)"
+// 缺 @keydown.space —— ARIA button 约定 Enter 与 Space 都要激活</div>
+    <div class="fix"><b>修复：</b>补 <code>@keydown.space.prevent</code>。</div>
+  </div>
+
+  <div class="item md">
+    <div class="ih"><span class="id">I-3</span><span class="ti"><code>apps/web/tsconfig.json</code> 未纳入构建配置与 <code>scripts/**</code>，类型错误不被告警</span><span class="sc">MEDIUM</span></div>
+    <span class="lbl">证据</span>
+    <div class="ev"><span class="ln">apps/web/tsconfig.json:20-26</span>
+"include": ["src/**/*", "test/**/*", "vite.config.ts"]
+// vite.smoke.config.ts / vitest.config.ts / scripts/** 均不在内
+（build/aliases.ts 仅因被 vite.config.ts import 才被传递检查）</div>
+    <span class="lbl">分审正反对照实测</span>
+    <div class="ev">往 vite.smoke.config.ts 追加 const __t: number = "str"  → vue-tsc exit 0   （漏检）
+往 App.vue 追加同类错误                              → vue-tsc exit 2   （覆盖正常）</div>
+    <div class="fix"><b>修复：</b>include 补 <code>vite.smoke.config.ts</code>、<code>vitest.config.ts</code>、<code>build/**</code>、<code>scripts/**</code>。</div>
+  </div>
+
+  <div class="item md">
+    <div class="ih"><span class="id">I-4</span><span class="ti"><code>packages/core</code> / <code>packages/knowledge</code> 声明 <code>"types": ["node"]</code> 却未声明 <code>@types/node</code></span><span class="sc">MEDIUM</span></div>
+    <span class="lbl">证据</span>
+    <div class="ev"><span class="ln">packages/core/tsconfig.json:4</span>  "types": ["node"]
+<span class="ln">packages/knowledge/tsconfig.json:4</span>  "types": ["node"]
+// 但两个包的 devDependencies 里都没有 @types/node（只有 packages/lunar 与 apps/web 有）
+// 当前能过纯粹靠 npm 提升把 @types/node 放到根 node_modules</div>
+    <p>后果链：任一 workspace 调整 devDeps（例如 web 去掉 <code>@types/node</code>）→ 这两个包立刻报 <code>Cannot find type definition file for 'node'</code>，且失败原因看起来与改动无关。</p>
+    <div class="fix"><b>修复：</b>两个包各自补 <code>@types/node</code>，或去掉 <code>"types": ["node"]</code>（core 号称平台无关纯逻辑，本就不该依赖 Node 类型）。</div>
+  </div>
+
+  <div class="item md">
+    <div class="ih"><span class="id">I-5</span><span class="ti"><code>.workbuddy/</code> 被 git 跟踪，AI 工作记忆与内部检查脚本随产品仓库走</span><span class="sc">MEDIUM</span></div>
+    <span class="lbl">证据</span>
+    <div class="ev">$ git ls-files .workbuddy
+.workbuddy/memory/2026-09-25.md          ← 会话记忆（含项目决策过程）
+.workbuddy/checks/docset-selfcheck.py
+.workbuddy/checks/doc-case-check.js
+.workbuddy/checks/kb-consistency.py
+.workbuddy/migrations/2026-09-25-journal-fixes.py
+# .gitignore 有长注释解释「不要忽略 build/」，却完全没提 .workbuddy/</div>
+    <p>后果链：AI 助手的临时笔记、内部检查脚本进入产品仓库历史，随时间无限增长；若仓库公开或交付客户，等于把内部工作过程一并发布。</p>
+    <div class="fix"><b>修复：</b>明确决策——要么 <code>.gitignore</code> 掉 <code>.workbuddy/</code>，要么在 README 说明其用途并接受入库（三个自查脚本被 07 文档引用，属有意入库；<code>memory/</code> 与 <code>migrations/</code> 建议不入）。</div>
+  </div>
+
+  <div class="item md">
+    <div class="ih"><span class="id">I-6</span><span class="ti"><code>engines</code> 宽于工具链实际要求，且无任何机制强制</span><span class="sc">MEDIUM</span></div>
+    <span class="lbl">证据</span>
+    <div class="ev"><span class="ln">package.json:32</span>   "node": "&gt;=20.19"
+<span class="ln">node_modules/vite/package.json</span>   "engines": { "node": "^20.19.0 || &gt;=22.12.0" }
+// Node 21.x、22.0–22.11 都能通过 engines 检查，却会被 vite 直接拒绝
+// 且无 .nvmrc、无 engine-strict、无 CI → engines 目前只是一句注释</div>
+    <div class="fix"><b>修复：</b>收紧为 <code>^20.19.0 || &gt;=22.12.0</code>，补 <code>.nvmrc</code>，并在 <code>.npmrc</code> 设 <code>engine-strict=true</code>。</div>
+  </div>
+
+  <div class="item md">
+    <div class="ih"><span class="id">D-4</span><span class="ti">三个自查脚本对拍的是「UI 原型」而非「交付实现」，README 却称其验证实现</span><span class="sc">MEDIUM</span></div>
+    <span class="lbl">证据</span>
+    <div class="ev"><span class="ln">docs/dev/README.md:96</span>  称 doc-case-check 验证「文档说的」与「**实现做的**」一致
+<span class="ln">.workbuddy/checks/doc-case-check.js:2</span>
+const C = require(".../docs/ui/build/core.js");        // ← 原型，不是 packages/core
+<span class="ln">.workbuddy/checks/kb-consistency.py:37</span>  同样读 docs/ui/build/core.js</div>
+    <p>后果链：改 <code>03/07</code> 文档或改 <code>packages/core</code> 时脚本不报警（仅靠 vitest 手工同步用例）。<b>D-1（闰闰六月）正是这种盲区的产物。</b></p>
+    <div class="fix"><b>修复：</b>把两个脚本的加载目标换成 <code>packages/core</code>（或其构建产物），或在脚本与 README 中显式标注「对拍对象为原型，交付实现另由 vitest 覆盖」。</div>
+    <p style="margin-top:9px"><span class="vfmark">主审读源确认 ✓</span></p>
+  </div>
+
+  <div class="item md">
+    <div class="ih"><span class="id">D-5</span><span class="ti">八卦类象类目数三方不一致：文档 9 类、代码 10 类（多「五味」）</span><span class="sc">MEDIUM</span></div>
+    <span class="lbl">证据</span>
+    <div class="ev"><span class="ln">packages/knowledge/src/trigrams.ts:173-184（10 类）</span>
+{ key: 'affairs', label: '性情人事' }, ... { key: 'taste', label: '五味' }
+<span class="ln">docs/dev/05-卦象知识库设计.md:51 表头（9 类，无「五味」，且写作「性情/人事」）</span>
+| 卦 | 五行 | 人伦 | 天时 | 地理 | 身体 | 动物 | 静物 | 性情/人事 | 方位 | 时令 |
+<span class="ln">docs/dev/06-UI-UX设计规范.md:137</span>
+**人伦 / 天时 / 地理 / 身体 / 动物 / 静物 / 性情人事 / 方位 / 时令**（9 类）
+<span class="ln">apps/web/src/views/LearnView.vue:5,115</span>  渲染全部 10 类，注释却写「与 05 §2.2 表头一致」</div>
+    <p>后果链：按文档实现 Android 端会漏掉「五味」一列；「与表头一致」的注释是错的。</p>
+    <div class="fix"><b>修复：</b>05 §2.2 补「五味」列（§2.1 schema 已有 <code>taste</code>）、06 §3.4 补「五味」，并统一「性情人事」写法。</div>
+    <p style="margin-top:9px"><span class="vfmark">主审读源确认 ✓</span></p>
+  </div>
+
+  <div class="item md">
+    <div class="ih"><span class="id">D-6</span><span class="ti">06 §6.1 的 aria-label 文案格式未落地</span><span class="sc">MEDIUM</span></div>
+    <span class="lbl">证据</span>
+    <div class="ev"><span class="ln">docs/dev/06-UI-UX设计规范.md:210</span>
+如「本卦水风井，上卦坎下卦巽，第一爻动」
+<span class="ln">apps/web/src/components/HexagramGlyph.vue:36-41</span>
+`六爻卦符，上卦${upper}，下卦${lower}，第 ${moving} 爻动`
+差异：缺卦名、多了逗号、「第 1 爻动」用阿拉伯数字+空格（规范为「第一爻动」）
+<span class="ln">apps/web/src/components/ResultPanel.vue:93,104,116</span>  未传自定义 label
+// runtime-smoke.cjs 不断言 aria-label</div>
+    <div class="fix"><b>修复：</b>在 <code>ResultPanel</code> 传入 <code>label="本卦{name}，上卦{u}下卦{l}，第{中文数字}爻动"</code>，或在 <code>HexagramGlyph</code> 内生成同格式。</div>
+  </div>
+
+  <div class="item md">
+    <div class="ih"><span class="id">D-7</span><span class="ti">触控目标 44px，低于 06 §6.1 要求的 48px</span><span class="sc">MEDIUM</span></div>
+    <span class="lbl">证据</span>
+    <div class="ev"><span class="ln">docs/dev/06-UI-UX设计规范.md:211</span>  | 触控目标 | 最小 48 × 48（Android dp / Web px） |
+<span class="ln">apps/web/src/styles/tokens.css:59</span>
+--tap-min: 44px;          /* 触控目标最小尺寸（06 §六 要求 48dp ≈ 48px，留 44px 兜底） */
+// 被 base.css:129,169、NavList.vue:93、App.vue:146、CastView.vue:582 使用</div>
+    <div class="fix"><b>修复：</b>改回 48px；或把 06 的数值改为 44px 并写明理由（注释里已有理由，但文档没同步）。</div>
+    <p style="margin-top:9px"><span class="vfmark">主审读源确认 ✓</span></p>
+  </div>
+
+  <div class="item md">
+    <div class="ih"><span class="id">D-8</span><span class="ti"><code>docs/ui/README.md</code> 内部自相矛盾，索引附属表版本滞后</span><span class="sc">MEDIUM</span></div>
+    <span class="lbl">证据</span>
+    <div class="ev"><span class="ln">docs/ui/README.md:20</span>  smoke.test.js「**25 条断言**」
+<span class="ln">docs/ui/README.md:43,66</span>  写 30；实测 30 pass / 0 fail      ← 同一文件自相矛盾
+<span class="ln">docs/ui/README.md:37</span>  「算法与 03 文档 **v1.3** 完全一致」 vs :8「03 … **v1.4**」  ← 自相矛盾，且 v1.3 正是互卦口径出错的版本
+<span class="ln">docs/dev/README.md:32</span>  附属文档表记 ../ui/README.md 为 **v1.1**，实际头部为 **v1.2**</div>
+    <div class="fix"><b>修复：</b><code>ui/README.md:20</code> 改 30、<code>:37</code> 改 v1.4；<code>dev/README.md:32</code> 改 v1.2。</div>
+    <p style="margin-top:9px"><span class="vfmark">主审读源确认 ✓</span></p>
+  </div>
+</div>
+
+<!-- ================= LOW ================= -->
+<div class="grp" data-g="lo">
+  <div class="gh"><span class="tag lo">LOW</span><span class="no">16 条</span></div>
+
+  <div class="item lo">
+    <div class="ih"><span class="id">C-5</span><span class="ti"><code>as</code> 断言掩盖越界，脏数据以 TypeError 崩溃</span><span class="sc">LOW</span></div>
+    <span class="lbl">证据</span>
+    <div class="ev"><span class="ln">packages/core/src/casters.ts:269-270</span>  分审实测 castByRandom(() =&gt; 1) 产出 upper=9、lower=9、moving=7（断言声称 1–8）
+<span class="ln">packages/core/src/record.ts:157-163</span>  replayRecord({...rec, tiTrigram: 0}) → TypeError: Cannot read properties of undefined (reading 'element')
+// 而 knowledge 的 trigram(n) 本可给出「未知先天八卦数：0」</div>
+    <div class="fix"><b>修复：</b>校验随机源区间；改用 <code>trigram()</code> 取卦而非直接下标。</div>
+  </div>
+
+  <div class="item lo">
+    <div class="ih"><span class="id">C-6</span><span class="ti">非整数被静默截断</span><span class="sc">LOW</span></div>
+    <span class="lbl">证据</span>
+    <div class="ev"><span class="ln">packages/core/src/casters.ts:56,124,178</span>  只查范围不查 Number.isInteger
+// 分审实测 castByTimeParts(7, 8, 15.5, 7) 被接受 → params.lunarDay=15.5、s1=30.5，
+// 而 modTrigram 内 Math.trunc 取 30 → 展示的中间量与结果不符，脏值经 inputParams 落库</div>
+    <div class="fix"><b>修复：</b>三处补 <code>Number.isInteger</code> 校验。</div>
+  </div>
+
+  <div class="item lo">
+    <div class="ih"><span class="id">C-7</span><span class="ti"><code>castByCharacter</code> 不校验 chars 与 strokes 长度一致</span><span class="sc">LOW</span></div>
+    <span class="lbl">证据</span>
+    <div class="ev"><span class="ln">packages/core/src/casters.ts:171-216,356-365</span>
+// 分审实测 { strokes: [11, 8], chars: ['梅'] } 被接受 → 第二字永久丢失
+// { strokes: [16], chars: [] } → 用户可见「undefined」16 画</div>
+    <div class="fix"><b>修复：</b>校验两数组等长且非空。</div>
+  </div>
+
+  <div class="item lo">
+    <div class="ih"><span class="id">C-8</span><span class="ti">晚子时信息未落库，无法复盘「按次日计」</span><span class="sc">LOW</span></div>
+    <span class="lbl">证据</span>
+    <div class="ev"><span class="ln">packages/core/src/casters.ts:281-290</span>（04 §2.4 亦未定义）
+// 分审实测 inputParamsOf(晚子时 cast) = {"yearBranchNo":7,"lunarMonth":1,"lunarDay":1,"hourNo":1}
+// 与 00:30 起卦完全同形 → 详情页无法说明「按次日计」</div>
+    <div class="fix"><b>修复：</b>inputParams 增加 <code>shifted</code> 字段（04 §2.4 同步）。</div>
+  </div>
+
+  <div class="item lo">
+    <div class="ih"><span class="id">C-9</span><span class="ti"><code>readonly</code> 仅编译期，未 <code>Object.freeze</code></span><span class="sc">LOW</span></div>
+    <span class="lbl">证据</span>
+    <div class="ev"><span class="ln">packages/knowledge/src/trigrams.ts:68 · hexagrams.ts:86 · strokes.ts:21</span>
+// 均未 Object.freeze → keywords 等数组运行时可改；UI 若原地排序会污染全局共享知识库</div>
+    <div class="fix"><b>修复：</b>对导出常量加 <code>Object.freeze</code>（或至少在开发期用 <code>deepFreeze</code>）。</div>
+  </div>
+
+  <div class="item lo">
+    <div class="ih"><span class="id">W-11</span><span class="ti"><code>index.html</code> 硬编码 theme-color 与 <code>applyTheme</code> 不一致，首屏颜色跳变</span><span class="sc">LOW</span></div>
+    <span class="lbl">证据</span>
+    <div class="ev"><span class="ln">apps/web/index.html:8</span>  &lt;meta name="theme-color" content="#b03a2e" /&gt;
+<span class="ln">apps/web/src/platform/settings.ts:71</span>  浅色主题写入 #FAF7F0
+// 内联脚本只设 data-theme 不设 meta → 首屏浏览器 UI 颜色会跳变一次</div>
+    <div class="fix"><b>修复：</b>内联脚本一并设置 meta，或让 index.html 的初值等于浅色值。</div>
+  </div>
+
+  <div class="item lo">
+    <div class="ih"><span class="id">W-13</span><span class="ti"><code>KeepAlive</code> 无 <code>max</code>，且详情页按 path 缓存 → 每访问一条卦例永久缓存一个实例</span><span class="sc">LOW</span></div>
+    <span class="lbl">证据</span>
+    <div class="ev"><span class="ln">apps/web/src/App.vue:98</span>  &lt;KeepAlive&gt;（无 max）
+<span class="ln">apps/web/src/App.vue:41-43</span>  record-detail 的 key = route.path
+// 每个实例都带一个 ConfirmDialog 的常驻 window keydown 监听 → 长列表浏览下内存只增不减</div>
+    <div class="fix"><b>修复：</b>给 <code>KeepAlive</code> 设 <code>:max</code>；或详情页不缓存。</div>
+  </div>
+
+  <div class="item lo">
+    <div class="ih"><span class="id">W-14</span><span class="ti"><code>goBack</code> 依赖 <code>history.length &gt; 1</code>，外链深链会跳出应用</span><span class="sc">LOW</span></div>
+    <span class="lbl">证据</span>
+    <div class="ev"><span class="ln">apps/web/src/router.ts:83-86</span>
+// 从外部站点深链进详情页后点「返回」→ 会跳出应用而不是回到 /records</div>
+    <div class="fix"><b>修复：</b>按路由层级判断而非 history 长度。</div>
+  </div>
+
+  <div class="item lo">
+    <div class="ih"><span class="id">W-15</span><span class="ti">未知 hash 静默回退到 <code>/cast</code> 但不改写 URL</span><span class="sc">LOW</span></div>
+    <span class="lbl">证据</span>
+    <div class="ev"><span class="ln">apps/web/src/router.ts:37-38,49</span>
+// #/foo → 渲染 /cast 但地址栏仍是 #/foo，地址与页面长期不一致</div>
+    <div class="fix"><b>修复：</b>回退时 <code>replaceRoute('/cast')</code> 改写 hash。</div>
+  </div>
+
+  <div class="item lo">
+    <div class="ih"><span class="id">I-7</span><span class="ti">冒烟的 <code>#/records</code> 断言用导航常驻文案，零信息量</span><span class="sc">LOW</span></div>
+    <span class="lbl">证据</span>
+    <div class="ev"><span class="ln">apps/web/scripts/runtime-smoke.cjs:236</span>
+results.push(await inspect('#/records', ['卦例']));     // 「卦例」是 NavList 常驻 Tab 文案
+// 应用壳渲染即通过，与 RecordsView 是否正常无关
+// （幸而 inspectRecordNaming 用 idb.size()===2 + .rec-item 数量 ===2 兜住了这条路由，非假通过）</div>
+    <div class="fix"><b>修复：</b>改为路由特有文案（如「还没有卦例」）。</div>
+  </div>
+
+  <div class="item lo">
+    <div class="ih"><span class="id">I-8</span><span class="ti"><code>icon-192.png</code> / <code>icon-512.png</code> 无任何引用（且无 manifest）</span><span class="sc">LOW</span></div>
+    <span class="lbl">证据</span>
+    <div class="ev">两文件约 104 KB，被拷进 dist/，但全仓 grep 无引用：
+index.html 只引 icon.svg / favicon-32.png / apple-touch-icon.png
+App.vue:49 引 ./icon.svg ；SettingsPanel.vue:12 引 ./mark.svg
+且没有 manifest.webmanifest</div>
+    <div class="fix"><b>修复：</b>补 PWA manifest（顺带解决移动端 Web 收益），或删掉这两张图。</div>
+  </div>
+
+  <div class="item lo">
+    <div class="ih"><span class="id">I-9</span><span class="ti"><code>idb-stub.cjs</code> 的 <code>put()</code> 未受自检开关控制</span><span class="sc">LOW</span></div>
+    <span class="lbl">证据</span>
+    <div class="ev"><span class="ln">apps/web/scripts/idb-stub.cjs:85</span>
+if (!SELFTEST_SKIP_WRITE) rows.set(id, rec);      // 只作用于 add()，put() 未纳入
+// 当前保存走 add（platform/records.ts:64），故自检有效（已实测 exit 1 + FAIL）；
+// 若将来保存改走 put，IDB_STUB_SELFTEST=1 将不再破坏写入 → 自检显示 PASS 却什么也没验证</div>
+    <div class="fix"><b>修复：</b><code>put()</code> 同样纳入 <code>SELFTEST_SKIP_WRITE</code>。</div>
+  </div>
+
+  <div class="item lo">
+    <div class="ih"><span class="id">I-10</span><span class="ti"><code>bump</code> 半途失败会留下不一致状态</span><span class="sc">LOW</span></div>
+    <span class="lbl">证据</span>
+    <div class="ev"><span class="ln">scripts/version.mjs:228-248</span>
+cmdBump 先 writeSource 改 version.json → 再 cmdSync() → 最后 prependChangelog()
+// 任一步 fail() 退出 → 留下「真源已升、派生未同步 / CHANGELOG 未写」
+// 好在 version:check 会立刻报错，属「响亮失败」而非静默，风险可控</div>
+    <div class="fix"><b>修复：</b>可接受；若要更稳，先写 CHANGELOG 再改真源，或加回滚。</div>
+  </div>
+
+  <div class="item lo">
+    <div class="ih"><span class="id">D-9</span><span class="ti"><code>tokens.css</code> 注释仍写「取自 06 … v1.1」</span><span class="sc">LOW</span></div>
+    <span class="lbl">证据</span>
+    <div class="ev"><span class="ln">apps/web/src/styles/tokens.css:2</span>  取自 06 … v1.1（06 已 v1.4）</div>
+    <div class="fix"><b>修复：</b>同步为 v1.4（或去掉版本号改指向章节）。</div>
+  </div>
+
+  <div class="item lo">
+    <div class="ih"><span class="id">D-10</span><span class="ti">生克 summary 文案：03 文档示例与实现不一致</span><span class="sc">LOW</span></div>
+    <span class="lbl">证据</span>
+    <div class="ev"><span class="ln">docs/dev/03-起卦核心算法设计.md:234 · docs/ui/build/core.js:174</span>
+「体生用：小凶，主耗损、付出多」
+<span class="ln">packages/core/src/judge.ts:44</span>
+「小凶，耗损精力」   → summary 为「体生用：小凶，耗损精力」（UI 以此为准）</div>
+    <div class="fix"><b>修复：</b>统一文案（文档示例同步实现，或反之）。</div>
+  </div>
+
+  <div class="item lo">
+    <div class="ih"><span class="id">D-11</span><span class="ti">有测试但无用例号（测了但文档没写）</span><span class="sc">LOW</span></div>
+    <span class="lbl">证据</span>
+    <div class="ev"><span class="ln">packages/core/test/cases.test.ts:113</span>  输入边界（0 / 负数 / 超限 / 非整数）
+<span class="ln">packages/core/test/cases.test.ts:140</span>  变卦六爻
+<span class="ln">apps/web/test/smoke.test.ts:234</span>  初始为空</div>
+    <div class="fix"><b>修复：</b>在 07 补登记用例号（与 D-3 的「有号无实现」一并整理）。</div>
+  </div>
+</div>
+
+<h2>四、缺失护栏（不计入上表）</h2>
+<table class="t">
+  <tr><th>级别</th><th>项</th><th>理由</th></tr>
+  <tr><td class="c">必须有</td><td><b>CI</b>（一个 job：<code>npm ci &amp;&amp; npm run verify &amp;&amp; npm run build</code>）</td><td>直接堵住 <b>I-1</b>，也让 <b>I-6</b> 的 engines 有落地处。当前门禁完全依赖「人记得跑」</td></tr>
+  <tr><td class="c">必须有</td><td><b>LICENSE</b></td><td>目标是发布 Web + Android 双端（含应用商店）。无许可证 = 默认保留全部权利，与 README「便于移植和共享」的定位直接冲突</td></tr>
+  <tr><td class="c">必须有</td><td><b>收紧 engines + <code>.nvmrc</code> + <code>engine-strict</code></b></td><td><b>I-6</b> 已证明当前声明是错的（vite 要 <code>^20.19 || &gt;=22.12</code>）</td></tr>
+  <tr><td class="c">必须有</td><td><b>lint</b>（ESLint+Prettier 或 Biome）</td><td><code>noUnusedLocals</code> 只覆盖类型层；Vue 模板里的问题（<code>v-for</code> 缺 key、模板误用 <code>==</code>）目前零静态检查。领域逻辑还要被 Android 端复用，越早加成本越低</td></tr>
+  <tr><td class="c">建议有</td><td><code>.editorconfig</code></td><td>仓库已有 <code>.gitattributes</code> 锁行尾，补 editorconfig 统一缩进/字符集，成本极低</td></tr>
+  <tr><td class="c">建议有</td><td>PWA manifest</td><td>已有 <code>icon-192/512</code> 与 <code>apple-touch-icon</code>，移动端 Web 收益明确（顺带解决 <b>I-8</b>）</td></tr>
+  <tr><td class="c">可无</td><td>commitlint / husky · changesets / semantic-release</td><td>前者：小团队 + 已有 <code>version:bump</code> 与 CHANGELOG 约定，收益有限。后者：与现有 <code>version.json</code> 单一真源体系冲突，<b>不应引入</b></td></tr>
+</table>
+
+<h2>五、建议的修复顺序</h2>
+<p class="no" style="margin-top:0">排序依据：用户可感知程度 × 修复成本 × 阻塞后续工作的程度。</p>
+<table class="t">
+  <tr><th>批次</th><th>内容</th><th>理由</th></tr>
+  <tr><td class="c">第 1 批<br><span class="no">结果可信度</span></td><td><b>C-1</b>（年支口径统一）→ <b>C-2</b>（卦代码补零）→ <b>C-4</b>（闰月断言）→ <b>C-3</b>（繁体查表）</td><td>都在共享层，Android 端开工前必须定稿，否则两端各错一遍。C-1 影响每次起卦的可验证性，最优先</td></tr>
+  <tr><td class="c">第 2 批<br><span class="no">已实测的用户可见缺陷</span></td><td><b>W-1 / W-2</b>（弹窗残留 + 静默空操作）→ <b>W-3</b>（起卦方式双真源）→ <b>W-4</b>（详情页无 catch）→ <b>W-9</b>（错误态与空态打架）</td><td>都是「用户点一下就撞上」的问题，且修法明确、改动小（多数 3–5 行）。W-1 与 W-2 同源，一起修</td></tr>
+  <tr><td class="c">第 3 批<br><span class="no">门禁与安全</span></td><td><b>I-1</b>（verify 加 build）→ <b>I-2</b>（version.mjs gradle 守卫）→ <b>W-6</b>（CSV 注入）→ 补 CI + LICENSE</td><td>I-1 与 CI 一起做，成本最低收益最大；W-6 是唯一有安全含义的一条</td></tr>
+  <tr><td class="c">第 4 批<br><span class="no">文档与原型</span></td><td><b>D-1</b>（原型闰闰）→ <b>D-2</b>（docx 重导或声明降级）→ <b>D-3</b>（用例号对齐）→ <b>D-5 / D-6 / D-7 / D-8</b> → <b>D-4</b>（自查脚本改对拍交付实现）</td><td>D-4 放最后但价值高——它是 D-1 这类漂移的根因</td></tr>
+  <tr><td class="c">第 5 批<br><span class="no">健壮性与无障碍</span></td><td><b>W-5</b>（dbPromise 复位）→ <b>W-7 / W-8 / W-10</b>（无障碍）→ <b>I-3 / I-4 / I-5 / I-6</b>（工程配置）→ LOW 批量</td><td>不影响当前可用性，但会随代码增长放大</td></tr>
+</table>
+
+<h2>六、复核方法与可信度说明</h2>
+<h3>怎么审的</h3>
+<ul>
+  <li><b>先查基线</b>：仓库内既有 <code>docs/review-2026-09-25.md</code> 是文档目录核查（非代码审查），故本轮为首次代码审查，并对其结论做了「是否仍成立」的复核（见 §二）。</li>
+  <li><b>4 路并行分审</b>，按子系统切而非按文件切：core 领域层 / Web 应用层 / 构建与测试基建 / 文档与实现一致性。每路要求给出 <code>file:line</code> 证据、后果链、修复建议，并明确「不报纯风格问题」。</li>
+  <li><b>主审独立复核全部 10 条 HIGH</b>，未直接采信分审结论。复核手段：自写脚本实算（年支口径、闰月标签）、自建 jsdom harness 复跑（弹窗残留）、逐行读源（verify 覆盖面、version.mjs 守卫、CastView 双真源、RecordDetailView 无 catch）、解包 docx 扫描（P0 错值残留）、grep 全仓（用例号实现、繁体表键）。</li>
+</ul>
+<h3>可信度分级</h3>
+<table class="t">
+  <tr><th>级别</th><th>条目</th><th>说明</th></tr>
+  <tr><td class="c"><span class="yes">已独立验证</span></td><td>C-1 · W-1 · W-2 · W-3 · W-4 · I-1 · I-2 · D-1 · D-2 · D-3 · C-2 · C-3 · C-4 · D-4 · D-5 · D-7 · D-8</td><td>主审亲自跑脚本 / 读源码 / 解包扫描得到，可直接采信</td></tr>
+  <tr><td class="c">采信分审实跑</td><td>W-5 · W-6 · W-7 · W-8 · W-9 · W-10 · I-3 · I-4 · I-5 · I-6 · C-5 · C-6 · C-7 · C-8 · C-9 · W-11 · W-13 · W-14 · W-15 · I-7 · I-8 · I-9 · I-10 · D-6 · D-9 · D-10 · D-11</td><td>分审给出了可复核的证据（代码摘录或实跑输出），但主审未逐条重跑</td></tr>
+  <tr><td class="c"><span class="no">疑似待确认</span></td><td>见下</td><td><b>不计入</b>统计数字</td></tr>
+</table>
+<h3>疑似待确认（不计入上表）</h3>
+<ol>
+  <li><b>ConfirmDialog「取消」按钮上按 Enter 是否同时触发确认</b>：依 HTML 规范按钮 Enter 会合成 click，理论上会「想取消却删库」。jsdom 实测不复现（<code>buttonClick=0</code>），需真实 Chrome / Firefox 复核。成立则 W-2 升级。</li>
+  <li><b>「假成功删除」提示</b>：分审称残留弹窗上按 Enter 会弹「已删除」而记录未删；主审复跑时该 toast 未出现（<code>toast=[]</code>，且无未处理拒绝），故未计入。已确证的只是「静默无反馈」。</li>
+  <li><b><code>enforceRecordLimit</code> 的读-删竞态</b>：<code>listRecords()</code> 取快照后逐条删除，期间并发插入不被计入。需「保存与改上限几乎同时」或双标签页才可能超限。</li>
+  <li><b>多标签页设置真源分裂</b>：<code>stores/settings.ts</code> 无 <code>storage</code> 事件同步，A 标签页改主题/上限后 B 标签页内存值不变，且 B 下次写设置会覆盖回 A 的改动。</li>
+  <li><b><code>updateRecord</code> 用 <code>put</code> 可能复活已删除记录</b>：若记录已被另一标签页删除，详情页保存会把整条记录写回。</li>
+  <li><b><code>downloadFile</code> 1 秒后 <code>revokeObjectURL</code></b> 是否会在慢速/大文件下中断下载，需真实浏览器验证；导出量小，暂判 LOW。</li>
+  <li><b>笔画表覆盖度</b>：当前约 117 字，05 §4.2 目标是「一级 3500 + 二级 4500」。03 §6.4 有手动兜底，故未计为缺陷，但需确认 MVP 是否接受该覆盖度。</li>
+  <li><b><code>guaci</code> / <code>lines</code> / <code>yongText</code> 全为 null</b>：实现按「未校对前保持 null」，但 05 §3.1 schema 示例给了水风井完整卦辞爻辞。口径待定。</li>
+  <li><b>05 §3.5 词表本身可疑</b>（如「水风井：水牛、贤德」「泽天夬：奇怪」）：数据与文档一致、文档已留痕建议二校，非代码缺陷，但会直接展示给用户。</li>
+  <li><b><code>solarlunar@2.0.7</code> 的边界行为</b>：ISC 许可、未废弃，是唯一的第三方运行时依赖。1900 年前 / 2100 年后边界与闰月处理目前仅由少量点覆盖。已知 CVE 需联网 <code>npm audit</code> 才能定论（本次未联网）。</li>
+  <li><b><code>base: './'</code> + 相对资源 URL 的前提是 hash 路由</b>：一旦切到 history 模式，<code>App.vue:49</code> 的 <code>./icon.svg</code> 在 <code>/records/123</code> 这类路径下会解析错误。</li>
+  <li><b>dist 新鲜度无保障</b>：<code>dist/</code> 已被 <code>.gitignore</code> 忽略，审查开始时确实陈旧（含 <code>mark-1024.png</code>）。只要没有 CI，产物陈旧就是常态。</li>
+</ol>
+
+<h3>已还原的审查动作</h3>
+<p>分审为验证门禁而注入的漂移均已还原并与备份逐字节比对一致：<code>apps/web/src/generated/version.ts</code>、<code>apps/web/package.json</code>、<code>CHANGELOG.md</code>、<code>vite.smoke.config.ts</code>、<code>App.vue</code>；<code>git status</code> 仍为审查前的 29 项，<code>version:check</code> 恢复 exit 0。唯一残留改动是按审查要求执行的 <code>npm run build</code> 重建了 <code>apps/web/dist/</code>（已被 <code>.gitignore</code> 忽略，非仓库文件，且重建后陈旧文件已消失）。主审的临时脚本写在 <code>.tmp-review/</code>，审查结束后已删除。</p>
+
+<footer>
+  观梅 · Plumora 代码审查报告 · 2026-09-25 · 首轮全量代码审查 · CRITICAL 0 / HIGH 10 / MEDIUM 18 / LOW 16（HIGH 全部经主审独立复核）
+</footer>
+
+</div>
+
+<script>
+  var btns = document.querySelectorAll('.fbtn');
+  var groups = document.querySelectorAll('.grp');
+  btns.forEach(function (b) {
+    b.addEventListener('click', function () {
+      btns.forEach(function (x) { x.classList.remove('on'); });
+      b.classList.add('on');
+      var f = b.dataset.f;
+      groups.forEach(function (g) { g.style.display = (f === 'all' || g.dataset.g === f) ? '' : 'none'; });
+    });
+  });
+</script>
+</body>
+</html>

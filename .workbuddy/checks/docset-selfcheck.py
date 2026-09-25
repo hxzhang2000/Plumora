@@ -10,6 +10,9 @@ files = sorted(glob.glob(ROOT + "/docs/**/*.md", recursive=True))
 # 核查残留时须排除这些行，以及记录旧值作为证据的核查报告本身。
 CHANGELOG_ROW = re.compile(r"^\|\s*v\d+\.\d+\s*\|")
 DATE_ROW = re.compile(r"^\|\s*\d{4}-\d{2}-\d{2}\s*\|")
+# 核查报告 / 校对流水本身就是「旧值的证据」：它们的表格用 **旧值** 而非「旧值」标注，
+# 上面两条规则盖不住，故按文件名整体豁免（否则每轮核查都会自证有罪）。
+EVIDENCE_FILE = re.compile(r"(review-\d{4}-\d{2}-\d{2}|CHANGELOG)\.md$")
 def is_evidence(line, pat=None):
     """变更日志行 / 用「」引述旧值的更正说明 / 日期流水行 —— 均属合法出现旧值"""
     s = line.strip()
@@ -68,6 +71,8 @@ FORBIDDEN = [
 for pat, why in FORBIDDEN:
     hits = []
     for f in files:
+        if EVIDENCE_FILE.search(f):
+            continue
         md = io.open(f, encoding="utf-8").read()
         for i, line in enumerate(md.splitlines(), 1):
             if pat in line and not is_evidence(line, pat):
@@ -85,6 +90,8 @@ print("③ 「山水蒙」出现位置（应仅为合法卦名，不得出现在
 print("=" * 78)
 LEGIT = ["05-卦象知识库设计.md", "手写笔记识读记录.md"]
 for f in files:
+    if EVIDENCE_FILE.search(f):
+        continue
     md = io.open(f, encoding="utf-8").read()
     for i, line in enumerate(md.splitlines(), 1):
         if "山水蒙" in line and not is_evidence(line, "山水蒙"):

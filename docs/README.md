@@ -1,0 +1,81 @@
+# 观梅 · Plumora 文档目录
+
+本目录存放项目的设计文档、原型与校对底稿。**先读这一页**，它规定了「哪份文件是契约、哪份只是快照」。
+
+| 子目录 / 文件 | 内容 | 是否契约 |
+| --- | --- | --- |
+| [dev/](dev/README.md) | 九份主设计文档（00 竞品调研 ~ 08 版本计划）+ 索引 | ✅ **是**（`.md` 为唯一权威） |
+| [ui/](ui/README.md) | 单文件高保真交互原型（`观梅-Plumora-UI设计稿.html`）+ 构建源 | ⚠️ 参考实现，非契约 |
+| [reference/](reference/) | 知识库校对底稿（手写笔记原件与识读记录） | ⚠️ 素材，非契约 |
+| [brand-naming.md](brand-naming.md) | 品牌命名依据与商标检索清单 | ✅ 是 |
+| `*.docx` | 各 `.md` 的**导出快照** | ❌ **否** |
+
+---
+
+## 一、`*.docx` 只是导出快照，不是契约
+
+`docs/dev/*.docx` 与 `docs/brand-naming.docx` 是早期为「方便分发 / 批注」而导出的 Word 副本。
+
+**它们的定位是快照，不是源**：
+
+1. **唯一权威是同一目录下的 `.md`**。任何口径、数值、用例号以 `.md` 为准；`.docx` 与 `.md` 冲突时，**一律以 `.md` 为准**。
+2. **`.docx` 不参与版本控制体系**。文档版本号（`vX.Y`）只维护在 `.md` 的头部字段与变更日志里；`.docx` 里显示的版本号可能滞后，不代表文档当前状态。
+3. **`.docx` 不参与自动化校验**。`.workbuddy/checks/` 下的三个自查脚本只读 `.md`、`docs/ui/build/` 与 `packages/*` 的源码，**不会读 `.docx`**。所以「脚本全绿」不蕴含「`.docx` 是新的」。
+4. **不要拿 `.docx` 作为修改入口**。改文档请直接改 `.md`，必要时再重新导出。
+
+> **历史教训（审查报告 D-2）**：本轮审查发现 7 份 `.docx` 仍含已修订的 P0 错值「山水蒙」（互卦口径更正后 `.md` 已改为「水山蹇」）。原因正是上面第 3、4 条——`.docx` 不在任何护栏的覆盖范围内，改 `.md` 时没人会想到它。
+>
+> 因此**降级处理**：不再承诺 `.docx` 与 `.md` 同步，也不再为其投入「每轮重导」的成本；改为在文档体系里显式声明其快照地位。若将来确需对外分发 Word 版，再按需重新导出，并在此处登记导出日期。
+
+### 已登记的导出快照
+
+| 文件 | 对应源 | 状态 |
+| --- | --- | --- |
+| `dev/00-竞品调研报告.docx` | `dev/00-竞品调研报告.md` | 快照，可能滞后 |
+| `dev/01-产品需求文档PRD.docx` | `dev/01-产品需求文档PRD.md` | 快照，可能滞后 |
+| `dev/02-系统架构设计.docx` | `dev/02-系统架构设计.md` | 快照，可能滞后 |
+| `dev/03-起卦核心算法设计.docx` | `dev/03-起卦核心算法设计.md` | 快照，可能滞后 |
+| `dev/04-数据模型与存储设计.docx` | `dev/04-数据模型与存储设计.md` | 快照，可能滞后 |
+| `dev/05-卦象知识库设计.docx` | `dev/05-卦象知识库设计.md` | 快照，可能滞后 |
+| `dev/06-UI-UX设计规范.docx` | `dev/06-UI-UX设计规范.md` | 快照，可能滞后 |
+| `dev/07-测试计划.docx` | `dev/07-测试计划.md` | 快照，可能滞后 |
+| `dev/08-版本计划与发布规范.docx` | `dev/08-版本计划与发布规范.md` | 快照，可能滞后 |
+| `dev/README.docx` | `dev/README.md` | 快照，可能滞后 |
+| `brand-naming.docx` | `brand-naming.md` | 快照，可能滞后 |
+
+---
+
+## 二、目录职责
+
+```
+docs/
+├─ README.md               # 本文件：契约范围声明
+├─ brand-naming.md         # 品牌命名依据（契约）
+├─ review-2026-09-25.md    # 代码审查报告（工作记录，非契约）
+├─ dev/                    # 九份主设计文档 + 索引（契约，.md 为准）
+│  └─ knowledge-review/    # 知识库校对底稿与变更流水
+├─ ui/                     # 高保真交互原型（参考实现）
+│  └─ build/               # 原型源文件（template.html / core.js / app.js / pack.py / smoke.test.js）
+└─ reference/              # 手写笔记原件等素材
+```
+
+---
+
+## 三、改文档后要跑什么
+
+```bash
+python .workbuddy/checks/docset-selfcheck.py   # 文档集卫生（头部版本 vs 变更日志、旧值残留、表格列数、交叉引用）
+node   .workbuddy/checks/doc-case-check.js     # 03/07 用例逐条对拍**交付实现**（packages/knowledge + packages/core）
+python .workbuddy/checks/kb-consistency.py     # 05 速查表 / 词表 / 交付实现三方 64 卦数据一致
+
+# 原型冒烟（jsdom 装在隔离目录，必须显式给 NODE_PATH，见 ui/README.md）
+cd docs/ui && NODE_PATH="C:/Users/hxzha/.workbuddy/binaries/node/workspace/node_modules" node build/smoke.test.js
+```
+
+改了 `docs/ui/build/` 下的源文件后，**必须重新打包**，否则单文件 HTML 仍是旧代码：
+
+```bash
+python docs/ui/build/pack.py
+```
+
+> 这三个脚本的对拍对象是**交付实现**（`packages/*` 的 TS 源码），不是原型。原型另由 B 组做「原型 ↔ 交付」交叉一致性检查。理由见 [dev/07-测试计划.md](dev/07-测试计划.md) §3.8 与审查报告 D-4。

@@ -300,6 +300,13 @@
   }
 
   /* ---------- 卦例列表 ---------- */
+  /* 记录名称：优先「所问之事」（占卜目标），未填时回退到本卦卦名（06 §3.3 / 04 §2.8） */
+  function recTitle(r) {
+    var q = (r.question || "").trim();
+    if (q) return q;
+    var n = (r.benName || "").trim();
+    return n || (METHOD_NAMES[r.method] + " · " + r.lunarLabel);
+  }
   function renderRecords() {
     var kw = recordKeyword.trim().toLowerCase();
     var list = records.filter(function (r) {
@@ -314,8 +321,8 @@
     }
     box.innerHTML = list.map(function (r) {
       return "<div class='rec-item' data-id='" + r.id + "'>" +
-        "<div class='rec-line1'><b>" + r.benName + "</b><span class='badge v-" + r.verify + "'>" + VERIFY[r.verify] + "</span></div>" +
-        "<div class='rec-line2'>" + r.lunarLabel + " · " + METHOD_NAMES[r.method] + (r.question ? " · 「" + esc(r.question) + "」" : "") + "</div>" +
+        "<div class='rec-line1'><b>" + esc(recTitle(r)) + "</b><span class='badge v-" + r.verify + "'>" + VERIFY[r.verify] + "</span></div>" +
+        "<div class='rec-line2'>" + ((r.question || "").trim() ? esc(r.benName) + " · " : "") + r.lunarLabel + " · " + METHOD_NAMES[r.method] + "</div>" +
         "<div class='rec-line3'>" + r.relation + "（" + r.degree + "）→ " + r.bianName + "</div>" +
         "</div>";
     }).join("");
@@ -367,7 +374,8 @@
     html += uppers.map(function (u) {
       return "<div class='grid-row'><span class='grid-side'>" + GM.TRIGRAMS[u].name + "</span>" +
         lowers.map(function (l) {
-          var key = u + "-" + l;
+          // 卦代码统一由 GM.hexCodeOf 生成（两位段补零），不在各处手拼
+          var key = GM.hexCodeOf(u, l);
           return "<span class='grid-cell' data-key='" + key + "'>" + GM.HEX64[key][0].slice(-1) + "</span>";
         }).join("") + "</div>";
     }).join("");

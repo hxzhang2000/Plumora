@@ -1,6 +1,13 @@
 # 行尾：入库统一 LF，检出按平台（避免 Windows 下的 CRLF 噪声 diff）
 * text=auto
 
+# ⚠ Windows 脚本必须锁定 CRLF，不能跟随 text=auto。
+#   LF-only 的 .bat 会让 cmd 的 goto / 标签解析出错（跳转失败或执行到文件尾）。
+#   见 start.bat / start.ps1。
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
 # 二进制资产：不做行尾转换、不做文本 diff
 *.docx binary
 *.jpg  binary
