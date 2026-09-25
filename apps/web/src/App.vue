@@ -270,18 +270,22 @@ const brandMark = './icon.svg';
   padding: 6px 16px 24px;
 }
 
-/* ---------- 断点：桌面端展开 ---------- */
-@media (min-width: 900px) {
-  .sidebar {
-    display: flex;
-  }
+/* ---------- 断点：桌面端展开 ----------
+ *
+ * 判据是 `<html data-layout>`，不是 `@media (min-width: 900px)`。
+ * 媒体查询只能读视口宽度，用户没法在宽屏上主动切「手机模式」（看效果 / 窄屏对拍），
+ * 也没法在窄屏上切回「电脑模式」。改由 JS 统一把「视口自适应 + 用户强制」
+ * 解析成一个属性（platform/settings.ts 的 applyLayout），CSS 只认这个属性。
+ * 首屏防闪：index.html 的内联脚本会在样式生效前先写好 data-layout。 */
+[data-layout='desk'] .sidebar {
+  display: flex;
+}
 
-  .appbar {
-    display: none;
-  }
+[data-layout='desk'] .appbar {
+  display: none;
+}
 
-  .content-inner {
-    padding: 28px 32px 48px;
-  }
+[data-layout='desk'] .content-inner {
+  padding: 28px 32px 48px;
 }
 </style>

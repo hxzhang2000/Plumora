@@ -81,13 +81,14 @@ function run(id: number, fn: () => void) {
   transform: translateY(10px);
 }
 
-@media (min-width: 900px) {
-  .toast-host {
-    left: auto;
-    right: 28px;
-    bottom: 28px;
-    transform: none;
-    align-items: flex-end;
-  }
+/* 桌面端：Toast 挪到右下角（判据为 data-layout，见 App.vue 的断点说明。
+   scoped CSS 会把属性加到最后一个选择器上，[data-layout] 在 <html> 上，
+   后代选择器照样命中） */
+[data-layout='desk'] .toast-host {
+  left: auto;
+  right: 28px;
+  bottom: 28px;
+  transform: none;
+  align-items: flex-end;
 }
 </style>

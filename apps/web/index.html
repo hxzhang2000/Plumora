@@ -22,15 +22,27 @@
     // 并把 theme-color 一并同步（applyTheme 要到 JS 加载后才跑，光设 data-theme
     // 会让浏览器 UI 颜色在首屏跳变一次）。
     (function () {
+      var root = document.documentElement;
       try {
         var s = JSON.parse(localStorage.getItem('plumora.settings.v1') || '{}');
+
         var t = s.theme || 'SYSTEM';
         var dark = t === 'DARK' || (t === 'SYSTEM' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-        document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+        root.setAttribute('data-theme', dark ? 'dark' : 'light');
         var m = document.querySelector('meta[name="theme-color"]');
         if (m) m.setAttribute('content', dark ? '#1C1A17' : '#FAF7F0');
+
+        // 布局形态必须在样式生效前定好：断点判据是 <html data-layout>
+        // （见 src/App.vue 的断点说明）。若等 JS 加载完再由 applyLayout 补上，
+        // 宽屏用户会先看到一帧手机布局再跳成电脑布局。
+        var lm = s.layoutMode || 'AUTO';
+        var desk =
+          lm === 'DESKTOP' ||
+          (lm === 'AUTO' && window.matchMedia('(min-width: 900px)').matches);
+        root.setAttribute('data-layout', desk ? 'desk' : 'mobile');
       } catch (e) {
-        document.documentElement.setAttribute('data-theme', 'light');
+        root.setAttribute('data-theme', 'light');
+        root.setAttribute('data-layout', 'mobile');
       }
     })();
   </script>

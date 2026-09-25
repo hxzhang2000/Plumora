@@ -8,6 +8,21 @@ import type { StrokeStandard } from '@plumora/knowledge';
 
 export type ThemeMode = 'LIGHT' | 'DARK' | 'SYSTEM';
 
+/**
+ * 布局形态：AUTO = 跟视口宽度走；DESKTOP / MOBILE = 用户强制指定。
+ *
+ * 为什么要它：CSS 媒体查询只能读视口宽度，用户无法在宽屏上主动切到「手机模式」
+ * （看效果 / 截图 / 给窄屏设备对拍），也无法在窄屏上切回「电脑模式」。
+ * 强制值会写进 `<html data-layout>`，CSS 的断点判断全部改由该属性驱动（见 §布局）。
+ */
+export type LayoutMode = 'AUTO' | 'DESKTOP' | 'MOBILE';
+
+/** 断点判据（06 §6.2）：< 900px 为移动端形态，≥ 900px 为桌面端形态 */
+export const DESKTOP_QUERY = '(min-width: 900px)';
+
+/** 实际生效的布局形态 */
+export type EffectiveLayout = 'desk' | 'mobile';
+
 export interface Settings {
   /** 笔画标准（FR-10） */
   strokeStandard: StrokeStandard;
@@ -17,6 +32,8 @@ export interface Settings {
   tiYongRule: TiYongRule;
   /** 主题 */
   theme: ThemeMode;
+  /** 布局形态：AUTO 跟视口，DESKTOP / MOBILE 强制 */
+  layoutMode: LayoutMode;
   /** 保留记录上限：0 = 不限制 */
   recordLimit: 0 | 500 | 1000;
   /** 首启声明页已确认 */
@@ -30,6 +47,7 @@ export const DEFAULT_SETTINGS: Readonly<Settings> = {
   defaultCastMethod: 'TIME',
   tiYongRule: 'MOVING_LINE',
   theme: 'SYSTEM',
+  layoutMode: 'AUTO',
   recordLimit: 0,
   disclaimerAcknowledged: false,
 };
@@ -78,4 +96,43 @@ export function watchSystemTheme(onChange: () => void): () => void {
   const handler = () => onChange();
   mq.addEventListener('change', handler);
   return () => mq.removeEventListener('change', handler);
+}
+
+/* ---------- 布局形态 ---------- */
+
+function matchesDesktop(): boolean {
+  if (typeof window === 'undefined' || !window.matchMedia) return false;
+  return window.matchMedia(DESKTOP_QUERY).matches;
+}
+
+/** 把 LayoutMode 解析成实际形态：强制值优先，AUTO 才看视口宽度 */
+export function resolveLayout(mode: LayoutMode): EffectiveLayout {
+  if (mode === 'DESKTOP') return 'desk';
+  if (mode === 'MOBILE') return 'mobile';
+  return matchesDesktop() ? 'desk' : 'mobile';
+}
+
+/**
+ * 把形态写入 `<html data-layout>`。
+ *
+ * CSS 的断点不再写 `@media (min-width: 900px)`，而是写
+ * `[data-layout='desk'] &` —— 这样「用户强制」与「视口自适应」共用同一套选择器，
+ * 不会出现两套各写一遍、日后改一处忘另一处的漂移。
+ */
+export function applyLayout(mode: LayoutMode): void {
+  document.documentElement.setAttribute('data-layout', resolveLayout(mode));
+}
+
+/** 监听视口跨断点（仅 AUTO 下需要重算）；返回取消订阅函数 */
+export function watchViewport(onChange: () => void): () => void {
+  if (typeof window === 'undefined' || !window.matchMedia) return () => {};
+  const mq = window.matchMedia(DESKTOP_QUERY);
+  const handler = () => onChange();
+  mq.addEventListener('change', handler);
+  return () => mq.removeEventListener('change', handler);
+}
+
+/** 「切换」按钮的下一个形态：当前是桌面形态就切手机，反之切电脑 */
+export function nextToggleLayout(mode: LayoutMode): LayoutMode {
+  return resolveLayout(mode) === 'desk' ? 'MOBILE' : 'DESKTOP';
 }

@@ -356,14 +356,13 @@ function pick(upper: TrigramNumber, lower: TrigramNumber) {
   color: var(--c-muted);
 }
 
-@media (min-width: 900px) {
-  .grid-cell {
-    min-height: 44px;
-    font-size: var(--fs-sm);
-  }
+/* 桌面端：64 宫格放大（判据为 data-layout，见 App.vue 的断点说明） */
+[data-layout='desk'] .grid-cell {
+  min-height: 44px;
+  font-size: var(--fs-sm);
+}
 
-  .grid-row {
-    grid-template-columns: 32px repeat(8, minmax(0, 1fr));
-  }
+[data-layout='desk'] .grid-row {
+  grid-template-columns: 32px repeat(8, minmax(0, 1fr));
 }
 </style>

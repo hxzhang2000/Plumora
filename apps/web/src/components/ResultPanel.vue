@@ -346,14 +346,12 @@ const relationCn = computed(() => RELATION_CN[r.value.judge.relation]);
   color: var(--c-muted);
 }
 
-/* 桌面端：三卦并排更舒展 */
-@media (min-width: 900px) {
-  .trio {
-    gap: 16px;
-  }
+/* 桌面端：三卦并排更舒展（判据为 data-layout，见 App.vue 的断点说明） */
+[data-layout='desk'] .trio {
+  gap: 16px;
+}
 
-  .trio-col {
-    padding: 20px 12px 16px;
-  }
+[data-layout='desk'] .trio-col {
+  padding: 20px 12px 16px;
 }
 </style>
