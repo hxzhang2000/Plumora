@@ -88,12 +88,25 @@
 grep -rn "旧值" docs/ --include=*.md
 ```
 
-更系统的做法是跑 `.workbuddy/checks/` 下的两个脚本：
+更系统的做法是跑 `.workbuddy/checks/` 下的三个脚本（改完文档后建议全跑一遍）：
 
-| 脚本 | 作用 |
-| --- | --- |
-| `doc-case-check.js` | 把 03/07 文档的用例逐条对拍 `docs/ui/build/core.js`，验证「文档说的」与「实现做的」是否一致 |
-| `kb-consistency.py` | 比对 05 文档 §3.2 速查表 / §3.5 词表 / `core.js` 常量三方的 64 卦数据一致性 |
+| 脚本 | 作用 | 期望输出 |
+| --- | --- | --- |
+| `docset-selfcheck.py` | 文档集自身卫生：头部版本 vs 变更日志、旧值残留、Markdown 表格列数、交叉引用目标章节是否存在、单文件原型 HTML 与 `build/core.js` 数据是否漂移 | 22 项通过 / 0 项待处理 |
+| `doc-case-check.js` | 把 03/07 文档的用例逐条对拍 `docs/ui/build/core.js`，验证「文档说的」与「实现做的」是否一致 | 32 pass / 0 fail |
+| `kb-consistency.py` | 比对 05 文档 §3.2 速查表 / §3.5 词表 / `core.js` 常量三方的 64 卦数据一致性 | 无差异 |
+
+运行方式：
+
+```bash
+python .workbuddy/checks/docset-selfcheck.py
+node   .workbuddy/checks/doc-case-check.js
+python .workbuddy/checks/kb-consistency.py
+
+# 另：HTML 原型冒烟（jsdom 需显式指定 NODE_PATH，见 docs/ui/README.md）
+cd docs/ui && NODE_PATH="C:/Users/hxzha/.workbuddy/binaries/node/workspace/node_modules" \
+  node build/smoke.test.js
+```
 
 ---
 

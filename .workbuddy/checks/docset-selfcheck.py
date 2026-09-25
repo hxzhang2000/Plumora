@@ -157,5 +157,40 @@ else:
 
 print()
 print("=" * 78)
+print("⑥ 单文件原型 HTML 内联算法 vs build/core.js 数据一致性")
+print("=" * 78)
+def grab(path, key):
+    src = io.open(path, encoding="utf-8").read()
+    m = re.search(r"var %s = \{(.*?)\n  \};" % key, src, re.S)
+    return re.sub(r"\s+", "", m.group(1)) if m else None
+CORE = ROOT + "/docs/ui/build/core.js"
+HTML = ROOT + "/docs/ui/观梅-Plumora-UI设计稿.html"
+sync_bad = 0
+for key in ("TRIGRAMS", "HEX64", "STROKES"):
+    a, b = grab(CORE, key), grab(HTML, key)
+    if a is None or b is None:
+        sync_bad += 1
+        print("  FAIL 无法提取 %s（core=%s, html=%s）" % (key, a is not None, b is not None))
+    elif a != b:
+        sync_bad += 1
+        print("  FAIL %s 数据不一致：build/core.js 与 HTML 内联副本已漂移" % key)
+    else:
+        print("  ok   %s 一致" % key)
+# 头注释版本
+v1 = re.search(r"起卦核心算法（与 docs/dev/03-起卦核心算法设计\.md (v[\d.]+)", io.open(CORE, encoding="utf-8").read())
+v2 = re.search(r"起卦核心算法（与 docs/dev/03-起卦核心算法设计\.md (v[\d.]+)", io.open(HTML, encoding="utf-8").read())
+if v1 and v2 and v1.group(1) == v2.group(1):
+    print("  ok   头注释版本一致（%s）" % v1.group(1))
+else:
+    sync_bad += 1
+    print("  FAIL 头注释版本不一致：core=%s, html=%s" % (v1 and v1.group(1), v2 and v2.group(1)))
+if sync_bad:
+    bad += 1
+else:
+    ok += 1
+
+print()
+print("=" * 78)
 print("汇总：%d 项通过，%d 项待处理" % (ok, bad))
 print("=" * 78)
+sys.exit(1 if bad else 0)
