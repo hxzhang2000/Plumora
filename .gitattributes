@@ -1,0 +1,7 @@
+# 行尾：入库统一 LF，检出按平台（避免 Windows 下的 CRLF 噪声 diff）
+* text=auto
+
+# 二进制资产：不做行尾转换、不做文本 diff
+*.docx binary
+*.jpg  binary
+*.png  binary

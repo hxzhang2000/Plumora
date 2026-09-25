@@ -1,0 +1,27 @@
+# ── 通用 ─────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+*.tmp
+*.log
+
+# ── 编辑器 / IDE ─────────────────────────────────
+.idea/
+*.iml
+.vscode/
+*.swp
+
+# ── 签名与本地配置（见 docs/dev/08 §4.3 第 7 条）──
+local.properties
+*.jks
+*.keystore
+keystore.properties
+
+# ── 未来 Android 工程（M0 起按需启用）──────────────
+# ⚠️ 不要写裸 `build/` 或 `**/build/`：
+#    会把 docs/ui/build/（UI 原型的构建源，core.js / app.js / template.html / smoke.test.js）
+#    一并忽略掉。待 Android 工程建立后按模块显式写：
+#    /app/build/
+#    /build/
+#    /.gradle/
+#    /.kotlin/
