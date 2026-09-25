@@ -95,12 +95,11 @@ describe('布局形态（layoutMode）', () => {
 
   it('连续切换两次回到原形态（不会出现「切不回来」）', () => {
     viewportIsDesktop = true;
-    let mode = resolveLayout('AUTO');
-    const first = nextToggleLayout('AUTO');
-    expect(first).toBe('MOBILE');
-    mode = first;
-    const second = nextToggleLayout(mode);
-    expect(second).toBe('DESKTOP');
+    const first = nextToggleLayout('AUTO'); // 宽屏 → 手机
+    const second = nextToggleLayout(first); // 手机 → 电脑
+    expect(resolveLayout('AUTO')).toBe('desk');
+    expect(resolveLayout(first)).toBe('mobile');
+    expect(resolveLayout(second)).toBe('desk'); // 与 AUTO 在宽屏下的结果一致
   });
 
   it('applyLayout 把形态写进 <html data-layout>', () => {
