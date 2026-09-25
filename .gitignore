@@ -45,3 +45,7 @@ npm-debug.log*
 #    （.gitignore 对已被跟踪的文件无效），文件本身仍在磁盘上。
 .workbuddy/memory/
 .workbuddy/migrations/
+
+# AI 助手工作目录 .workbuddy-ai/（同样逐目录决策，不整目录忽略）
+#   目前只含 memory/ —— 会话工作记忆，只对本机有意义，且会随时间无限增长。
+.workbuddy-ai/memory/
