@@ -109,6 +109,60 @@ async function inspect(hash, mustContain) {
   return ok;
 }
 
+/**
+ * 断言「电脑模式 / 手机模式」切换真的生效。
+ *
+ * 只看按钮点了没用：判据是 `<html data-layout>`，而 CSS 的断点必须同步改成
+ * `[data-layout='desk'] &` 才会响应。若哪天有人把 CSS 改回 `@media`，
+ * data-layout 照样会变、按钮照样会换文案，但界面一动不动——
+ * 所以这里除了断言属性翻转，还要断言样式表里**确有** data-layout 规则
+ * （jsdom 无排版引擎，getComputedStyle 靠不住，改用结构断言）。
+ */
+async function inspectLayoutToggle() {
+  const doc = window.document;
+  const html = doc.documentElement;
+
+  const before = html.getAttribute('data-layout');
+  const btn = doc.querySelector('[aria-label^="切换布局"]');
+  if (!btn) {
+    console.log('  FAIL #布局切换   找不到切换按钮');
+    return false;
+  }
+
+  btn.click();
+  await sleep(160);
+  const after = html.getAttribute('data-layout');
+
+  // 再点一次必须能切回来——只放一个按钮、切过去就切不回来是这个功能的典型死局
+  const btn2 = doc.querySelector('[aria-label^="切换布局"]');
+  btn2.click();
+  await sleep(160);
+  const back = html.getAttribute('data-layout');
+
+  /**
+   * 样式侧断言直接读构建产物（dist/web.css）。
+   *
+   * jsdom 里没有样式表：CSS 是独立产物，冒烟只 eval 了 app.js，
+   * 所以 document.styleSheets 是空的——在那上面做断言会得到「永远不通过」。
+   * 读磁盘上的 CSS 反而更准：既能确认断点规则存在，也能确认没人把它改回
+   * `@media (min-width: 900px)`（改回去的话 data-layout 照变、界面一动不动）。
+   */
+  const cssPath = path.join(DIST, 'web.css');
+  const raw = fs.existsSync(cssPath) ? fs.readFileSync(cssPath, 'utf8') : '';
+  // 先剥掉注释再匹配：说明性注释里出现「@media (min-width: 900px)」这类字样很正常，
+  // 不该让护栏的判定跟着注释变。
+  const css = raw.replace(/\/\*[\s\S]*?\*\//g, '');
+  const hasRule = css.includes("data-layout='desk'") || css.includes('data-layout="desk"');
+  const hasMedia = /@media[^{]*min-width:\s*900px/.test(css);
+
+  const ok = before !== after && back === before && after !== '' && hasRule && !hasMedia;
+  console.log(
+    `${ok ? '  ok  ' : '  FAIL'} #布局切换   ${before} → ${after} → ${back}；` +
+      `断点规则 data-layout ${hasRule ? '有' : '缺'} / 残留 @media 900px ${hasMedia ? '有' : '无'}`,
+  );
+  return ok;
+}
+
 /** 打开设置面板，断言「关于」区显示的版本号与真源一致（验证生成常量真的接到了 UI） */
 async function inspectSettings(expectVersion) {
   const trigger =
@@ -342,6 +396,9 @@ function inspectSettingsDrawerA11y() {
 
   // 弹窗跨路由残留（W-1 / W-2）——须在列表页有卦例之后
   results.push(await inspectModalResidue());
+
+  // 布局形态切换（电脑模式 / 手机模式）——须在打开设置面板之前
+  results.push(await inspectLayoutToggle());
 
   // 设置抽屉关闭态可达性（W-7）——须在打开设置面板之前
   results.push(inspectSettingsDrawerA11y());

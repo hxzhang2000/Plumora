@@ -53,6 +53,12 @@ const themeOptions: { value: ThemeMode; label: string }[] = [
   { value: 'SYSTEM', label: '跟随系统' },
 ];
 
+const layoutOptions = [
+  { value: 'AUTO' as const, label: '自动' },
+  { value: 'DESKTOP' as const, label: '电脑' },
+  { value: 'MOBILE' as const, label: '手机' },
+];
+
 const limitOptions = [
   { value: '0' as const, label: '不限制' },
   { value: '500' as const, label: '500 条' },
@@ -200,6 +206,19 @@ onBeforeUnmount(() => {
         <section class="group">
           <span class="group-label">主题</span>
           <SegControl v-model="settings.theme" :options="themeOptions" compact aria-label="主题" />
+        </section>
+
+        <section class="group">
+          <span class="group-label">布局形态</span>
+          <SegControl
+            v-model="settings.layoutMode"
+            :options="layoutOptions"
+            compact
+            aria-label="布局形态"
+          />
+          <p class="note">
+            「自动」按视口宽度切换（≥ 900px 为电脑形态）；选「电脑」或「手机」则固定下来，不再随窗口宽度变化。顶栏与侧栏的切换按钮只在这两者之间互换，要回到「自动」请在此选择。
+          </p>
         </section>
 
         <section class="group">

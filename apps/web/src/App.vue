@@ -5,8 +5,11 @@
  *   < 900px ：顶部标题栏 + 底部 3 Tab + 单列内容
  *   ≥ 900px ：左侧固定导航 + 居中内容区（06 §六 折叠屏/平板/桌面展开态）
  *
- * 两种形态都渲染在 DOM 中，由 CSS 媒体查询切换，
- * 避免 JS 断点判断带来的首屏闪烁与布局抖动。
+ * 两种形态都渲染在 DOM 中，由 CSS 切换（判据是 `<html data-layout>`，
+ * 见下方断点说明），避免 JS 断点判断带来的首屏闪烁与布局抖动。
+ *
+ * 用户可以在顶栏 / 侧栏一键切换「电脑模式 / 手机模式」（LayoutToggle），
+ * 也可以在设置面板里选「自动 / 电脑 / 手机」。
  */
 import { computed, ref } from 'vue';
 import CastView from '@/views/CastView.vue';
@@ -15,6 +18,7 @@ import RecordDetailView from '@/views/RecordDetailView.vue';
 import RecordsView from '@/views/RecordsView.vue';
 import ResultView from '@/views/ResultView.vue';
 import DisclaimerGate from '@/components/DisclaimerGate.vue';
+import LayoutToggle from '@/components/LayoutToggle.vue';
 import NavList from '@/components/NavList.vue';
 import SettingsPanel from '@/components/SettingsPanel.vue';
 import ToastHost from '@/components/ToastHost.vue';
@@ -61,6 +65,7 @@ const brandMark = './icon.svg';
       </div>
       <NavList variant="side" />
       <div class="sidebar-foot">
+        <LayoutToggle variant="side" />
         <button type="button" class="side-settings" @click="settingsOpen = true">
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <circle cx="12" cy="12" r="3.2" />
@@ -83,14 +88,17 @@ const brandMark = './icon.svg';
             <span>PLUMORA</span>
           </div>
         </div>
-        <button type="button" class="icon-btn" aria-label="设置" @click="settingsOpen = true">
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <circle cx="12" cy="12" r="3.2" />
+        <div class="appbar-ops">
+          <LayoutToggle variant="bar" />
+          <button type="button" class="icon-btn" aria-label="设置" @click="settingsOpen = true">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="3.2" />
             <path
               d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.5-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.5 2 1.5A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.5 2 3.5 2.4-1a7 7 0 0 0 2 1.2L10 21h4l.5-2.6a7 7 0 0 0 2-1.2l2.4 1 2-3.5-2-1.5c.1-.4.1-.8.1-1.2z"
-            />
-          </svg>
-        </button>
+              />
+            </svg>
+          </button>
+        </div>
       </header>
 
       <main class="content scroll-area">
@@ -230,6 +238,13 @@ const brandMark = './icon.svg';
   font-size: var(--fs-xs);
   color: var(--c-muted);
   letter-spacing: 1px;
+}
+
+.appbar-ops {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
 }
 
 .icon-btn {
