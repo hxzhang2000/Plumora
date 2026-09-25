@@ -1,0 +1,101 @@
+/* ============================================================
+ * 卦符自绘组件样式 —— 06 文档 §4.2「不依赖 Unicode 字体渲染」
+ *
+ * 用 DOM 色块绘制爻线，保证所有平台渲染一致；
+ * 卦符六爻**自上而下**绘制（06 §3.2 硬性布局约定）。
+ * ============================================================ */
+
+.glyph {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 7px;
+  --bar-w: 52px;
+  --bar-h: 7px;
+  --yin-w: 23px;
+  --gap: 6px;
+}
+
+.glyph.sm {
+  gap: 4px;
+  --bar-w: 40px;
+  --bar-h: 4px;
+  --yin-w: 17px;
+  --gap: 5px;
+}
+
+.glyph.lg {
+  --bar-w: 64px;
+  --bar-h: 8px;
+  --yin-w: 29px;
+}
+
+.glyph .yao {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  gap: var(--gap);
+}
+
+.glyph .bar {
+  display: block;
+  width: var(--bar-w);
+  height: var(--bar-h);
+  border-radius: 3px;
+  background: var(--c-ink);
+}
+
+.glyph .yao.yin .bar {
+  width: var(--yin-w);
+}
+
+.glyph .yao.moving .bar {
+  background: var(--c-accent);
+}
+
+/* 动爻实心圆点（朱砂红），位于该爻右侧 */
+.glyph .dot {
+  position: absolute;
+  right: -16px;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--c-accent);
+  transform: translateY(-50%);
+}
+
+/* 逐爻浮现 + 圆点弹入（06 §五：每爻 80ms，动爻圆点最后弹入） */
+.glyph.animate .yao {
+  animation: glyph-fade-up 0.4s backwards;
+}
+
+.glyph.animate .yao:nth-child(1) { animation-delay: 0.05s; }
+.glyph.animate .yao:nth-child(2) { animation-delay: 0.13s; }
+.glyph.animate .yao:nth-child(3) { animation-delay: 0.21s; }
+.glyph.animate .yao:nth-child(4) { animation-delay: 0.29s; }
+.glyph.animate .yao:nth-child(5) { animation-delay: 0.37s; }
+.glyph.animate .yao:nth-child(6) { animation-delay: 0.45s; }
+
+.glyph.animate .dot {
+  animation: glyph-pop 0.3s 0.55s backwards;
+}
+
+@keyframes glyph-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes glyph-pop {
+  from {
+    transform: translateY(-50%) scale(0);
+  }
+  to {
+    transform: translateY(-50%) scale(1);
+  }
+}

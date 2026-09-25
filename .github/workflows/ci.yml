@@ -1,0 +1,34 @@
+name: CI
+
+# 门禁：把 `npm run verify` 从「人记得跑」变成「每次推送必跑」。
+#
+# verify 已包含生产构建（vite.config.ts + index.html 的真实链路），
+# 所以一个 job 就够——不需要再单独 build 一次。
+#
+# 对应代码审查报告的「缺失护栏」第 1 条（I-1 / I-6 的落地处）。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Node 版本取自 .nvmrc（与 .npmrc 的 engine-strict 配合，
+      # 版本不满足 vite 要求时 install 直接失败而不是构建期才报错）
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: 安装依赖（严格按 lockfile）
+        run: npm ci
+
+      # 版本一致性 → 类型检查 → 单测 → 运行时冒烟 → 生产构建
+      - name: 全量门禁
+        run: npm run verify

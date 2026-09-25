@@ -1,0 +1,24 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["vite/client", "node"],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@plumora/core": ["../../packages/core/src/index.ts"],
+      "@plumora/knowledge": ["../../packages/knowledge/src/index.ts"],
+      "@plumora/lunar": ["../../packages/lunar/src/index.ts"]
+    }
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.d.ts",
+    "src/**/*.vue",
+    "test/**/*.ts",
+    "build/**/*.ts",
+    "vite.config.ts",
+    "vite.smoke.config.ts",
+    "vitest.config.ts"
+  ]
+}

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="description" content="观梅 · Plumora —— 梅花易数起卦排盘工具，仅供传统文化学习与研究使用。" />
+  <!-- 初值必须等于「浅色」的主题色（platform/settings.ts applyTheme 的浅色值）。
+       写成朱砂色会让首屏浏览器 UI 颜色跳变一次（审查 W-11）。 -->
+  <meta name="theme-color" content="#FAF7F0" />
+  <title>观梅 · Plumora</title>
+  <!-- 图标：印章形态的竖排篆书「观梅」（见 src/App.vue 的 brandMark 说明）。
+       带 / 的路径由 Vite 按 base: './' 重写成相对路径，故可部署到任意子目录。 -->
+  <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+  <!-- PWA：让 icon-192 / icon-512 真正被引用（此前无 manifest，两张图是死资源），
+       同时给移动端「添加到主屏幕」一个像样的启动形态。 -->
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <script>
+    // 首屏防闪白：在样式加载前按本地设置写入 data-theme，
+    // 并把 theme-color 一并同步（applyTheme 要到 JS 加载后才跑，光设 data-theme
+    // 会让浏览器 UI 颜色在首屏跳变一次）。
+    (function () {
+      try {
+        var s = JSON.parse(localStorage.getItem('plumora.settings.v1') || '{}');
+        var t = s.theme || 'SYSTEM';
+        var dark = t === 'DARK' || (t === 'SYSTEM' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+        var m = document.querySelector('meta[name="theme-color"]');
+        if (m) m.setAttribute('content', dark ? '#1C1A17' : '#FAF7F0');
+      } catch (e) {
+        document.documentElement.setAttribute('data-theme', 'light');
+      }
+    })();
+  </script>
+</head>
+<body>
+  <div id="app"></div>
+  <noscript>观梅 · Plumora 需要启用 JavaScript 才能使用。</noscript>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

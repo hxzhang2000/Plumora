@@ -1,0 +1,22 @@
+{
+  "name": "@plumora/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "观梅 · Plumora 起卦核心算法 —— 平台无关纯逻辑，仅依赖 @plumora/knowledge",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@plumora/knowledge": "*"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.4"
+  }
+}

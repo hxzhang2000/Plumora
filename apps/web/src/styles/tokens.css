@@ -1,0 +1,101 @@
+/* ============================================================
+ * 设计令牌 —— 取自 docs/dev/06-UI-UX设计规范.md v1.5 §4
+ *
+ * 色板语义：宣纸（背景）/ 墨线（主色）/ 朱砂（强调）/ 青灰（辅助）
+ * 主题通过 <html data-theme="light|dark"> 切换（06 §4.1）
+ * ============================================================ */
+
+:root {
+  /* ---------- 色板（浅色主题，06 §4.1） ---------- */
+  --c-bg: #faf7f0;          /* 宣纸底色 */
+  --c-surface: #ffffff;     /* 卡片、对话框 */
+  --c-surface-2: #f5f1e8;   /* 次级面（输入框底、分组底） */
+  --c-text: #2b2b2b;        /* 正文 */
+  --c-muted: #8a8578;       /* 注释、标签 */
+  --c-ink: #3a3a3a;         /* 墨线：阳爻、主按钮、图标 */
+  --c-accent: #b03a2e;      /* 朱砂：动爻、吉凶徽标 */
+  --c-second: #6b7b8c;      /* 青灰：阴爻断线、次级按钮 */
+  --c-line: #e8e2d5;        /* 描边 */
+  --c-accent-soft: rgba(176, 58, 46, 0.08);
+  --c-second-soft: rgba(107, 123, 140, 0.14);
+  --c-scrim: rgba(30, 26, 20, 0.45);
+
+  /* ---------- 阴影 ---------- */
+  --shadow-card: 0 8px 30px rgba(58, 54, 44, 0.08);
+  --shadow-float: 0 12px 36px rgba(58, 54, 44, 0.16);
+  --shadow-main: 0 6px 18px rgba(176, 58, 46, 0.28);
+
+  /* ---------- 圆角 ---------- */
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-pill: 999px;
+
+  /* ---------- 间距 ---------- */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+
+  /* ---------- 字体（06 §4.2） ---------- */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'HarmonyOS Sans SC',
+    'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
+  --font-serif: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', 'SimSun', STSong, serif;
+
+  --fs-xs: 11.5px;
+  --fs-sm: 12.5px;
+  --fs-base: 14.5px;
+  --fs-md: 15px;
+  --fs-lg: 17px;
+  --fs-xl: 22px;
+
+  /* ---------- 布局 ---------- */
+  --nav-h: 58px;            /* 底部 Tab 高度（移动端） */
+  --sidebar-w: 232px;       /* 侧边导航宽度（桌面端） */
+  --content-max: 1080px;    /* 内容最大宽度 */
+  --tap-min: 48px;          /* 触控目标最小尺寸（06 §6.1 要求 48dp ≈ 48px，此处与规范一致，不再留 44px 兜底） */
+
+  /* ---------- 动效 ---------- */
+  --ease: cubic-bezier(0.2, 0.8, 0.3, 1);
+  --dur: 0.22s;
+
+  color-scheme: light;
+}
+
+[data-theme='dark'] {
+  --c-bg: #1c1a17;
+  --c-surface: #26231f;
+  --c-surface-2: #211e1a;
+  --c-text: #e8e2d5;
+  --c-muted: #9a927f;
+  --c-ink: #d8d2c4;
+  --c-accent: #c9564a;
+  --c-second: #8fa0b0;
+  --c-line: #3a362f;
+  --c-accent-soft: rgba(201, 86, 74, 0.14);
+  --c-second-soft: rgba(143, 160, 176, 0.16);
+  --c-scrim: rgba(0, 0, 0, 0.55);
+
+  --shadow-card: 0 8px 30px rgba(0, 0, 0, 0.32);
+  --shadow-float: 0 12px 36px rgba(0, 0, 0, 0.45);
+  --shadow-main: 0 6px 18px rgba(201, 86, 74, 0.24);
+
+  color-scheme: dark;
+}
+
+/* 尊重系统「减少动画」设置（06 §六 动效降级） */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur: 0.01s;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
