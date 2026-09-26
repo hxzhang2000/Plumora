@@ -28,8 +28,8 @@ import LearnView from '@/views/LearnView.vue';
 import RecordDetailView from '@/views/RecordDetailView.vue';
 import RecordsView from '@/views/RecordsView.vue';
 import ResultView from '@/views/ResultView.vue';
+import ShiYiPanel from '@/components/ShiYiPanel.vue';
 import DisclaimerGate from '@/components/DisclaimerGate.vue';
-import DeviceFrameToggle from '@/components/DeviceFrameToggle.vue';
 import LayoutToggle from '@/components/LayoutToggle.vue';
 import NavList from '@/components/NavList.vue';
 import QrCodeDialog from '@/components/QrCodeDialog.vue';
@@ -37,7 +37,6 @@ import QrEntry from '@/components/QrEntry.vue';
 import SettingsPanel from '@/components/SettingsPanel.vue';
 import ToastHost from '@/components/ToastHost.vue';
 import { route } from '@/router';
-import { useDeviceFrame } from '@/stores/deviceFrame';
 import { useQrDialog } from '@/stores/qrDialog';
 
 const settingsOpen = ref(false);
@@ -51,10 +50,7 @@ const { qrOpen, closeQr } = useQrDialog();
 /**
  * 手机框预览（真机框）：宽屏 + 手机形态时自动套框，顶栏框图标可进出。
  * 解构出顶层 ref 才能在模板里自动解包（store 返回的普通对象不会被解包）。
- * available 同时用作框图标的 v-if —— 真机窄屏上恒为 false，按钮不渲染。
- * （framed 只在 DeviceFrameToggle 内部用，外壳不再需要它。）
  */
-const { available } = useDeviceFrame();
 
 const view = computed(() => {
   switch (route.value.name) {
@@ -66,15 +62,19 @@ const view = computed(() => {
       return RecordDetailView;
     case 'learn':
       return LearnView;
+    case 'shi-yi':
+      return ShiYiPanel;
     default:
       return CastView;
   }
 });
 
 // 详情视图按 path 重建；其余视图保活，切换 Tab 不丢输入
-const viewKey = computed(() =>
-  route.value.name === 'record-detail' ? route.value.path : route.value.name,
-);
+const viewKey = computed(() => {
+  if (route.value.name === 'record-detail') return route.value.path;
+  if (route.value.name === 'shi-yi') return route.value.path;
+  return route.value.name;
+});
 
 // 品牌标（public/icon.svg，印章形态）。
 // 用运行时相对 URL 而不是静态 src：① Vite 会把模板里的静态 src 当模块去解析，
@@ -123,7 +123,6 @@ const brandMark = './icon.svg';
         </div>
         <div class="appbar-ops">
           <LayoutToggle variant="bar" />
-          <DeviceFrameToggle v-if="available" />
           <QrEntry variant="bar" />
           <button type="button" class="icon-btn" aria-label="设置" @click="settingsOpen = true">
             <svg viewBox="0 0 24 24" aria-hidden="true">

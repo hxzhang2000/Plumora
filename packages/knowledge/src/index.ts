@@ -36,3 +36,23 @@ export type { Hexagram, HexagramLine, HexCode, KnowledgeBaseIssue } from './hexa
 
 export { STROKES, TRADITIONAL_ALIAS, STROKES_SOURCE, lookupStrokes, isHanChar } from './strokes.js';
 export type { StrokeEntry, StrokeLookup, StrokeStandard } from './strokes.js';
+
+export {
+  SHIYI_TEXTS,
+  getShiyiText,
+  getShiyiChapter,
+  allShiyiParagraphs,
+  validateShiyiData,
+} from './shiYi.js';
+export type {
+  ShiyiSlug,
+  ShiyiChapterId,
+  ShiyiParagraphId,
+  ShiyiText,
+  ShiyiChapter,
+  ShiyiParagraph,
+  ShiyiAnnotation,
+  ShiyiAnnotationKind,
+  ShiyiParagraphKind,
+  ShiyiIssue,
+} from './shiYi.js';

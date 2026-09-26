@@ -609,9 +609,6 @@ async function inspectNumberCast() {
   // 设置抽屉关闭态可达性（W-7）——须在打开设置面板之前
   results.push(inspectSettingsDrawerA11y());
 
-  // 手机框预览（宽屏 + 手机形态自动套框 / 框图标进出）——同样须在面板打开之前
-  results.push(await inspectDeviceFrame());
-
   // 版本接线端到端：设置面板「关于」区显示的版本号必须与真源一致
   const expectVersion = JSON.parse(fs.readFileSync(VERSION_JSON, 'utf8')).version;
   results.push(await inspectSettings(expectVersion));

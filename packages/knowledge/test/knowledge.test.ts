@@ -145,13 +145,80 @@ describe('05 §2.2 八卦类象表', () => {
   });
 });
 
-describe('卦辞 / 爻辞为 M1 待录入项', () => {
-  it('未校对前保持 null（不得臆造文本）', () => {
+describe('卦辞 / 爻辞数据完整性（《周易正義》维基文库录入）', () => {
+  it('64 条 guaci 均非 null', () => {
     for (const h of Object.values(HEXAGRAMS)) {
-      expect(h.guaci, h.name).toBeNull();
-      expect(h.lines, h.name).toBeNull();
-      expect(h.yongText, h.name).toBeNull();
+      expect(h.guaci, h.name).not.toBeNull();
     }
+  });
+
+  it('64 条 lines 均非 null 且各含 6 条爻辞', () => {
+    for (const h of Object.values(HEXAGRAMS)) {
+      expect(h.lines, h.name).not.toBeNull();
+      expect(h.lines?.length, h.name).toBe(6);
+    }
+  });
+
+  it('仅乾（用九）、坤（用六）有 yongText，其余为 null', () => {
+    for (const h of Object.values(HEXAGRAMS)) {
+      if (h.code === '01-01' || h.code === '08-08') {
+        expect(h.yongText, h.name).not.toBeNull();
+      } else {
+        expect(h.yongText, h.name).toBeNull();
+      }
+    }
+  });
+
+  it('爻辞 index 恒为 1–6 且 name 非空', () => {
+    for (const h of Object.values(HEXAGRAMS)) {
+      for (const line of h.lines!) {
+        expect(line.index, h.name).toBeGreaterThanOrEqual(1);
+        expect(line.index, h.name).toBeLessThanOrEqual(6);
+        expect(line.name.length, h.name).toBeGreaterThan(0);
+        expect(line.text.length, h.name).toBeGreaterThan(0);
+      }
+    }
+  });
+});
+
+describe('传注层数据完整性（彖传/大象传/文言，《周易正义》维基文库录入）', () => {
+  it('64 条 tuan 均非 undefined 且非空串', () => {
+    for (const h of Object.values(HEXAGRAMS)) {
+      expect(h.tuan, h.name).toBeDefined();
+      expect(h.tuan!.length, h.name).toBeGreaterThan(0);
+    }
+  });
+
+  it('64 条 daxiang 均非 undefined 且非空串', () => {
+    for (const h of Object.values(HEXAGRAMS)) {
+      expect(h.daxiang, h.name).toBeDefined();
+      expect(h.daxiang!.length, h.name).toBeGreaterThan(0);
+    }
+  });
+
+  it('仅乾（01-01）、坤（08-08）有 wenyan，其余为 undefined', () => {
+    for (const h of Object.values(HEXAGRAMS)) {
+      if (h.code === '01-01' || h.code === '08-08') {
+        expect(h.wenyan, h.name).toBeDefined();
+        expect(h.wenyan!.length, h.name).toBeGreaterThan(0);
+      } else {
+        expect(h.wenyan, h.name).toBeUndefined();
+      }
+    }
+  });
+
+  it('小象（xiaoxiang）已入库（252/384 爻辞有小象）', () => {
+    let hexWithXiaoxiang = 0;
+    let totalEntries = 0;
+    for (const h of Object.values(HEXAGRAMS)) {
+      if (h.xiaoxiang) {
+        hexWithXiaoxiang++;
+        totalEntries += Object.keys(h.xiaoxiang).length;
+      }
+    }
+    // 62 卦有小象数据，共 252 条爻辞小象
+    expect(hexWithXiaoxiang).toBeGreaterThan(60);
+    expect(totalEntries).toBeGreaterThan(200);
   });
 });
 

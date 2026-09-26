@@ -8,7 +8,7 @@
 
 import { computed, readonly, ref } from 'vue';
 
-export type RouteName = 'cast' | 'result' | 'records' | 'record-detail' | 'learn';
+export type RouteName = 'cast' | 'result' | 'records' | 'record-detail' | 'learn' | 'shi-yi';
 
 export interface Route {
   readonly name: RouteName;
@@ -30,6 +30,10 @@ function parse(hash: string): Route {
       return { name: 'result', params: {}, path: '/result' };
     case 'learn':
       return { name: 'learn', params: {}, path: '/learn' };
+    case 'shi-yi':
+      return seg[1]
+        ? { name: 'shi-yi', params: { slug: seg[1] }, path: `/shi-yi/${seg[1]}` }
+        : { name: 'learn', params: {}, path: '/learn' };
     case 'records':
       return seg[1]
         ? { name: 'record-detail', params: { id: seg[1] }, path: `/records/${seg[1]}` }
@@ -73,6 +77,7 @@ export const activeTab = computed<'cast' | 'records' | 'learn'>(() => {
     case 'record-detail':
       return 'records';
     case 'learn':
+    case 'shi-yi':
       return 'learn';
     default:
       return 'cast';
@@ -104,6 +109,7 @@ export function replaceRoute(path: string): void {
  */
 const PARENT_PATH: Partial<Record<RouteName, string>> = {
   'record-detail': '/records',
+  'shi-yi': '/learn?tab=shiYI',
 };
 
 export function goBack(fallback = '/cast'): void {

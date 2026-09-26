@@ -26,6 +26,7 @@ import { RELATION_CN, huLines, type ResolvedHexagram } from '@plumora/core';
 import { TRIGRAMS, getHexagramByLines, type Hexagram } from '@plumora/knowledge';
 import DegreeBadge from '@/components/DegreeBadge.vue';
 import HexagramStage from '@/components/HexagramStage.vue';
+import GuaciYaoCiPanel from '@/components/GuaciYaoCiPanel.vue';
 
 type TabKey = 'ben' | 'hu' | 'bian';
 type HalfMark = { kind: 'ti' | 'yong'; text: string };
@@ -259,6 +260,20 @@ const bianFacts = computed(() => {
   };
 });
 
+/** 卦辞 / 爻辞 / 传注 数据到位性：Q2「数据到位同 PR 删占位卡」的判据。
+ *  六字段任一非空即视为「数据到位」——占位卡消失、聚合面板接管。 */
+const hasGuaciData = computed(() => {
+  const h = r.value.ben;
+  return !!(
+    h.guaci ||
+    h.lines ||
+    h.yongText ||
+    h.tuan ||
+    h.daxiang ||
+    (h.wenyan && h.wenyan.length)
+  );
+});
+
 /** 当前互卦 / 变卦的错卦（六爻阴阳相反）与综卦（六爻上下颠倒） */
 const cuoZong = computed(() => {
   const r0 = r.value;
@@ -375,13 +390,16 @@ const halfRows = computed(() => {
           </div>
         </section>
 
-        <!-- 卦辞 / 爻辞 -->
-        <section class="card">
+        <!-- 卦辞 / 爻辞：数据到位时用聚合面板（GuaciYaoCiPanel），否则保留占位卡（Q2） -->
+        <GuaciYaoCiPanel
+          v-if="hasGuaciData"
+          :hexagram="r.ben"
+          :moving-line="r.moving"
+        />
+        <section v-else class="card">
           <h3 class="card-title">卦辞 · 爻辞</h3>
           <p class="pending">
-            本卦卦辞与动爻爻辞（{{ r.movingLineName }}）属知识库 M1 录入项
-            （见 05 文档 §3.3），需按《周易》通行本录入并两轮人工校对后开放。
-            当前以「卦意关键词 + 类象」作为参考。
+            本卦卦辞与动爻爻辞（{{ r.movingLineName }}）数据暂无，当前以「卦意关键词 + 类象」作为参考。
           </p>
         </section>
       </template>

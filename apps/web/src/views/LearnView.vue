@@ -13,13 +13,16 @@ import {
 } from '@plumora/knowledge';
 import SegControl from '@/components/SegControl.vue';
 import TrigramGlyph from '@/components/TrigramGlyph.vue';
+import GuaciYaoCiPanel from '@/components/GuaciYaoCiPanel.vue';
+import ShiYiPanel from '@/components/ShiYiPanel.vue';
 
-type View = 'xx' | 'grid';
+type View = 'xx' | 'grid' | 'shiYI';
 
 const view = ref<View>('xx');
 const viewOptions = [
   { value: 'xx' as const, label: '八卦类象' },
   { value: 'grid' as const, label: '六十四卦' },
+  { value: 'shiYI' as const, label: '十翼' },
 ];
 
 /* ---------- 八卦类象 ---------- */
@@ -81,7 +84,7 @@ function pick(upper: TrigramNumber, lower: TrigramNumber) {
     </template>
 
     <!-- 六十四卦 -->
-    <template v-else>
+    <template v-else-if="view === 'grid'">
       <section class="card">
         <h3 class="card-title">六十四卦速查（行＝上卦，列＝下卦，点格查看）</h3>
         <div class="grid64">
@@ -113,9 +116,15 @@ function pick(upper: TrigramNumber, lower: TrigramNumber) {
             <span class="kw-title">卦意</span>
             <span v-for="k in selectedHex.keywords" :key="k" class="chip">{{ k }}</span>
           </div>
-          <p class="pending">卦辞与爻辞属知识库 M1 录入项，校对完成后开放。</p>
+          <GuaciYaoCiPanel v-if="selectedHex.guaci || selectedHex.lines" :hexagram="selectedHex" />
+          <p v-else class="pending">卦辞与爻辞数据暂无。</p>
         </div>
       </section>
+    </template>
+
+    <!-- 十翼 -->
+    <template v-else>
+      <ShiYiPanel />
     </template>
   </div>
 </template>
