@@ -4,6 +4,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { METHOD_CN, VERIFY_STATUS_CN, lineName, type HexagramRecord } from '@plumora/core';
 import { getHexagramByCode } from '@plumora/knowledge';
 import ConfirmDialog from '@/components/ConfirmDialog.vue';
+import QrCodeDialog from '@/components/QrCodeDialog.vue';
 import SegControl from '@/components/SegControl.vue';
 import { APP_NAME, APP_STAGE, APP_VERSION_LABEL } from '@/generated/version';
 
@@ -29,6 +30,7 @@ const emit = defineEmits<{ close: [] }>();
 
 const settings = useSettings();
 const confirmClear = ref(false);
+const qrOpen = ref(false);
 
 const strokeOptions = [
   { value: 'SIMPLIFIED' as const, label: '简体' },
@@ -245,6 +247,20 @@ onBeforeUnmount(() => {
           </button>
         </section>
 
+        <section class="group">
+          <span class="group-label">跨设备</span>
+          <button type="button" class="btn-ghost block" @click="qrOpen = true">
+            <span class="qr-btn">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 4h6v6H4zM6 6h2v2H6zM14 4h6v6h-6zM16 6h2v2h-2zM4 14h6v6H4zM6 16h2v2H6z" />
+                <path d="M14 14h2v2h-2zM16 16h2v2h-2zM18 14h2v2h-2zM14 18h2v2h-2zM18 18h2v2h-2z" />
+              </svg>
+              <span>手机扫码打开本页</span>
+            </span>
+          </button>
+          <p class="note">生成当前页面的二维码（含当前路由），手机扫一扫即可在同一页继续。</p>
+        </section>
+
         <hr class="divider" />
 
         <section class="about">
@@ -260,6 +276,8 @@ onBeforeUnmount(() => {
       </div>
     </aside>
   </Teleport>
+
+  <QrCodeDialog :open="qrOpen" @close="qrOpen = false" />
 
   <ConfirmDialog
     :open="confirmClear"
@@ -382,6 +400,20 @@ onBeforeUnmount(() => {
 
 .block {
   width: 100%;
+}
+
+.qr-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.qr-btn svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+  stroke: none;
 }
 
 .about p {

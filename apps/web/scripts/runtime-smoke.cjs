@@ -163,6 +163,50 @@ async function inspectLayoutToggle() {
   return ok;
 }
 
+/**
+ * 断言「手机扫码打开本页」真的画出了二维码。
+ *
+ * 断言的是 `<path>` 有内容 + viewBox 合法，而不是「svg 元素存在」——
+ * 后者在编码抛错、path 为空字符串时照样通过，用户扫了个空白方块。
+ * 编码正确与否由单测里的 jsQR 往返解码保证，这里只保证接线没断。
+ *
+ * 调用前需先执行 inspectSettings 把设置面板打开。
+ */
+async function inspectQrCode() {
+  const doc = window.document;
+  const trigger = [...doc.querySelectorAll('button')].find((b) =>
+    (b.textContent || '').includes('手机扫码'),
+  );
+  if (!trigger) {
+    console.log('  FAIL #二维码     找不到「手机扫码打开本页」入口');
+    return false;
+  }
+
+  trigger.click();
+  await sleep(200);
+
+  const svg = doc.querySelector('svg[aria-label^="扫码打开"]');
+  const path = svg ? svg.querySelector('path') : null;
+  const d = path ? path.getAttribute('d') || '' : '';
+  const viewBox = svg ? svg.getAttribute('viewBox') || '' : '';
+  // 「M x y h n v 1 h -n z」——至少得有若干段，且 viewBox 是 "0 0 N N"
+  const segments = (d.match(/M/g) || []).length;
+  const vbOk = /^0 0 \d+ \d+$/.test(viewBox);
+  const ok = Boolean(svg) && segments > 20 && vbOk && d.length > 40;
+
+  // 关掉弹窗，别挡住后续断言
+  const closeBtn = [...doc.querySelectorAll('button')].find(
+    (b) => (b.textContent || '').trim() === '关闭',
+  );
+  if (closeBtn) closeBtn.click();
+  await sleep(160);
+
+  console.log(
+    `${ok ? '  ok  ' : '  FAIL'} #二维码     path ${segments} 段 / viewBox ${vbOk ? '合法' : '异常'}`,
+  );
+  return ok;
+}
+
 /** 打开设置面板，断言「关于」区显示的版本号与真源一致（验证生成常量真的接到了 UI） */
 async function inspectSettings(expectVersion) {
   const trigger =
@@ -406,6 +450,9 @@ function inspectSettingsDrawerA11y() {
   // 版本接线端到端：设置面板「关于」区显示的版本号必须与真源一致
   const expectVersion = JSON.parse(fs.readFileSync(VERSION_JSON, 'utf8')).version;
   results.push(await inspectSettings(expectVersion));
+
+  // 二维码接线（须在设置面板打开后执行）
+  results.push(await inspectQrCode());
 
   // 图标接线（须在设置面板打开后执行）
   results.push(inspectBrandIcons());

@@ -35,13 +35,48 @@ function appVersionPlugin(): Plugin {
   };
 }
 
+/**
+ * 把 dev server 的**局域网地址**写进页面 meta。
+ *
+ * 为什么需要：「手机扫码打开本页」要能工作，dev server 必须监听局域网，
+ * 而且页面得知道那个地址——浏览器 JS 拿不到本机的局域网 IP，
+ * 只有 dev server 自己知道（vite 的 resolvedUrls.network）。
+ * 用户在电脑上开的是 localhost，直接拿 location.href 做二维码，
+ * 手机扫出来是它自己的 localhost，打不开且看不出原因。
+ *
+ * 生产构建（build）下 ctx.server 为 undefined → 写入空数组，
+ * 此时 share.ts 直接用 location.href，正是想要的行为。
+ */
+function lanUrlsPlugin(): Plugin {
+  return {
+    name: 'plumora-lan-urls',
+    transformIndexHtml(html, ctx) {
+      const network = ctx.server?.resolvedUrls?.network ?? [];
+      return {
+        // 不改 HTML 本体，只追加 meta —— 但 html 字段是必填的，原样透传
+        html,
+        tags: [
+          {
+            tag: 'meta',
+            attrs: { name: 'plumora-lan-urls', content: JSON.stringify(network) },
+            injectTo: 'head',
+          },
+        ],
+      };
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [vue(), appVersionPlugin()],
+  plugins: [vue(), appVersionPlugin(), lanUrlsPlugin()],
   // 相对 base：产物可放任意子目录 / 静态托管，便于迁移与自托管部署
   base: './',
   resolve: { alias },
   server: {
-    host: '127.0.0.1',
+    // 监听全部网卡（含局域网），而不是只监听 127.0.0.1：
+    // 手机要在同一 Wi-Fi 下访问到本机，仅回环地址是不够的。
+    // 注意这会把开发服务暴露到局域网——只在开发期生效，生产构建产物是纯静态文件。
+    host: true,
     port: 5173,
   },
   build: {
