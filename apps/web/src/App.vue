@@ -38,6 +38,7 @@ import SettingsPanel from '@/components/SettingsPanel.vue';
 import ToastHost from '@/components/ToastHost.vue';
 import { route } from '@/router';
 import { useQrDialog } from '@/stores/qrDialog';
+import '@/stores/deviceFrame';
 
 const settingsOpen = ref(false);
 
