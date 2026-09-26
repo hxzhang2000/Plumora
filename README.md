@@ -70,7 +70,9 @@ https://<用户名>.github.io/Plumora/
 
 ## 版本管理
 
-Web 端与 Android 端**共用同一版本号**，真源为仓根 [`version.json`](version.json)。```bash
+Web 端与 Android 端**共用同一版本号**，真源为仓根 [`version.json`](version.json)。
+
+```bash
 npm run version:show         # 查看当前版本与全部派生目标状态
 npm run version:bump:patch   # 升版本（自动同步 + 插入 CHANGELOG 条目）
 npm run version:check        # 校验派生目标是否与真源一致（已接入 npm run verify）
