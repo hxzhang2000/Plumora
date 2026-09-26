@@ -53,7 +53,14 @@ npm run verify       # 版本一致性 + 类型检查 + 全量单测 + 运行时
 
 Web 端为纯静态产物，可直接部署到 GitHub Pages。仓库已内置自动发布工作流 [`.github/workflows/deploy-pages.yml`](.github/workflows/deploy-pages.yml)：推送到 `main`（或手动触发 workflow）即自动构建并上线，无需把构建产物提交进仓库。
 
-Pages 由工作流**自动启用**，无需在 Settings 里手动配置；唯一前提是仓库为**公开**（GitHub Free 账户的私有仓库不支持 Pages）。首次推送后等待 1–5 分钟，即可通过以下地址访问：
+首次使用前需**启用一次 Pages**（前提：仓库为**公开**，GitHub Free 账户的私有仓库不支持）：
+
+- 方式一（网页）：仓库 **Settings → Pages → Build and deployment**，把 **Source** 选为 **GitHub Actions** 并保存；
+- 方式二（命令行）：`gh api -X POST repos/<你的用户名>/Plumora/pages -f build_type=workflow`。
+
+> 工作流的 `configure-pages` 带 `enablement: true`，但 GITHUB_TOKEN **没有**新建 Pages site 的权限，故首次启用必须手动完成一次；启用后它仅作无害的 no-op。
+
+启用后推送 `main` 即自动构建上线，等待 1–5 分钟，即可通过以下地址访问：
 
 ```
 https://<用户名>.github.io/Plumora/
