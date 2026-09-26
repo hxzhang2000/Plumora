@@ -2,7 +2,7 @@
 /** 卦例列表 —— 06 §3.3：搜索 + 应验状态筛选 + 时间倒序 */
 import { computed, onActivated, ref } from 'vue';
 import {
-  METHOD_CN,
+  methodCn,
   VERIFY_STATUS_CN,
   VERIFY_STATUS_LIST,
   recordTitle,
@@ -119,7 +119,7 @@ function fmtTime(ms: number) {
           </div>
           <div class="line2">
             <template v-if="showGuaName(r)">{{ r.benGuaName }} · </template>{{ r.lunarLabel }} ·
-            {{ METHOD_CN[r.method] }}
+            {{ methodCn(r.method) }}
           </div>
           <div class="line3">
             {{ r.relation }} · {{ fmtTime(r.createdAt) }} → {{ hexName(r.bianGuaCode) }}

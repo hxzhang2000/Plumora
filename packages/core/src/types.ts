@@ -5,8 +5,13 @@
 
 import type { Element, Hexagram, StrokeStandard, TrigramNumber } from '@plumora/knowledge';
 
-/** 起卦方式（04 文档 §2.2 method 字段取值） */
-export type CastMethod = 'TIME' | 'NUMBER' | 'CHARACTER' | 'SOUND' | 'RANDOM';
+/**
+ * 起卦方式（04 文档 §2.2 method 字段取值）
+ *
+ * 原含 'SOUND'（声音/点数起卦），已按产品决策移除。旧卦例库里可能仍有
+ * method='SOUND' 的记录，展示一律走 `methodCn()` 兜底（回退「其他方式」），不回写。
+ */
+export type CastMethod = 'TIME' | 'NUMBER' | 'CHARACTER' | 'RANDOM';
 
 /** 体用判定流派（03 文档 §3.6） */
 export type TiYongRule =
@@ -46,9 +51,19 @@ export const METHOD_CN: Readonly<Record<CastMethod, string>> = {
   TIME: '时间起卦',
   NUMBER: '数字起卦',
   CHARACTER: '汉字起卦',
-  SOUND: '声音起卦',
   RANDOM: '随机起卦',
 };
+
+/**
+ * 起卦方式中文名的**容错取值**（展示层一律走这里，不要直接 `METHOD_CN[m]`）。
+ *
+ * 起卦方式会随产品决策增减（声音/点数起卦已下线），但旧卦例库里的 `method`
+ * 仍是写入时的旧值。直接查表会拿到 `undefined`，界面上渲染出「undefined · 丙午年…」。
+ * 未知方式统一回退成「其他方式」，既能显示又不会谎称。
+ */
+export function methodCn(method: string): string {
+  return METHOD_CN[method as CastMethod] ?? '其他方式';
+}
 
 /* ---------- 起卦输入参数（中间量，供结果页「起卦上下文」复现） ---------- */
 
@@ -80,12 +95,6 @@ export interface CharacterCastParams {
   readonly second?: number;
   readonly hourNo?: number;
   readonly sum?: number;
-}
-
-export interface SoundCastParams {
-  readonly count1: number;
-  readonly count2: number;
-  readonly sum: number;
 }
 
 export interface RandomCastParams {
@@ -123,17 +132,12 @@ export interface CharacterCast extends CastCommon {
   readonly params: CharacterCastParams;
 }
 
-export interface SoundCast extends CastCommon {
-  readonly method: 'SOUND';
-  readonly params: SoundCastParams;
-}
-
 export interface RandomCast extends CastCommon {
   readonly method: 'RANDOM';
   readonly params: RandomCastParams;
 }
 
-export type CastResult = TimeCast | NumberCast | CharacterCast | SoundCast | RandomCast;
+export type CastResult = TimeCast | NumberCast | CharacterCast | RandomCast;
 
 /* ---------- 04 文档 §2.4 的 inputParams JSON 形态 ---------- */
 
@@ -170,7 +174,6 @@ export type InputParams =
       standard: StrokeStandard;
       hourNo: number;
     }
-  | { type: 'SOUND'; count1: number; count2: number }
   | { type: 'RANDOM'; upper: number; lower: number; moving: number };
 
 /* ---------- 生克判定结果（03 文档 §四 JudgeResult） ---------- */

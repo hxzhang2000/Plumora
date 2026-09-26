@@ -10,7 +10,8 @@ function accept() {
 </script>
 
 <template>
-  <Teleport to="body">
+  <!-- 宿主 #app：预览态下即机身屏幕（说明见 SettingsPanel.vue 同处） -->
+  <Teleport to="#app">
     <Transition name="gate">
       <div v-if="!settings.disclaimerAcknowledged" class="gate">
         <div class="sheet">

@@ -1,6 +1,6 @@
 {
   "name": "@plumora/web",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "观梅 · Plumora Web 端（电脑端 + 移动端自适应）",

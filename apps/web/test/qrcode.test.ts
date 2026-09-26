@@ -104,6 +104,61 @@ describe('跨设备地址（shareTarget）', () => {
     });
   });
 
+  it('回环地址 + 候选含虚拟网卡（CGNAT 排前）→ 选真实局域网，不取第 0 个', () => {
+    // vite 的 resolvedUrls.network 按网卡枚举顺序排，Tailscale 虚拟网卡可能在前；
+    // 100.64.0.0/10 是 CGNAT 段（用户实测 100.76.255.6 扫不开），必须跳过
+    withHost('localhost', '["http://100.76.255.6:5173/", "http://192.168.1.5:5173/"]', (get) => {
+      const t = get();
+      expect(t.viaLan).toBe(true);
+      expect(t.url).toBe('http://192.168.1.5:5173/app/#/records');
+      expect(t.note).toContain('同一个 Wi-Fi');
+    });
+  });
+
+  it('回环地址 + 候选含 VMware 虚拟网卡宿主（192.168.x.1 排前）→ 选真实 Wi-Fi 地址', () => {
+    // 用户实测：VMware VMnet1/VMnet8 也是 192.168 段（192.168.125.1 / 192.168.74.1），
+    // 但末位 .1 是虚拟网卡宿主地址（真实 DHCP 不会发 .1），必须跳过，选 WLAN 的
+    // 192.168.0.111
+    withHost(
+      'localhost',
+      '["http://100.76.255.6:5173/", "http://192.168.125.1:5173/", "http://192.168.74.1:5173/", "http://192.168.0.111:5173/"]',
+      (get) => {
+        const t = get();
+        expect(t.viaLan).toBe(true);
+        expect(t.url).toBe('http://192.168.0.111:5173/app/#/records');
+        expect(t.note).toContain('同一个 Wi-Fi');
+      },
+    );
+  });
+
+  it('候选只有虚拟网卡宿主地址（192.168.x.1）→ 不换（换过去照样扫不开）', () => {
+    withHost('localhost', '["http://192.168.125.1:5173/"]', (get) => {
+      const t = get();
+      expect(t.viaLan).toBe(false);
+      expect(t.url).toContain('localhost');
+      expect(t.note).toContain('打不开');
+    });
+  });
+
+  it('回环地址 + 候选只有虚拟网卡 → 不换（换过去照样扫不开）', () => {
+    withHost('localhost', '["http://100.76.255.6:5173/"]', (get) => {
+      const t = get();
+      expect(t.viaLan).toBe(false);
+      expect(t.url).toContain('localhost');
+      expect(t.note).toContain('打不开');
+    });
+  });
+
+  it('当前就是虚拟网卡地址（CGNAT）+ 有真实局域网候选 → 换过去', () => {
+    // 用户直接开着 100.76.255.6 访问的情况：它不在回环表里，旧逻辑会原样放行
+    withHost('100.76.255.6', '["http://192.168.1.5:5173/"]', (get) => {
+      const t = get();
+      expect(t.viaLan).toBe(true);
+      expect(t.url).toBe('http://192.168.1.5:5173/app/#/records');
+      expect(t.note).toContain('同一个 Wi-Fi');
+    });
+  });
+
   it('回环地址 + 无局域网地址 → 原样返回并明确提示扫不了', () => {
     withHost('127.0.0.1', '[]', (get) => {
       const t = get();

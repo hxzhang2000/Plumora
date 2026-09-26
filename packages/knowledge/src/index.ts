@@ -34,5 +34,5 @@ export {
 } from './hexagrams.js';
 export type { Hexagram, HexagramLine, HexCode, KnowledgeBaseIssue } from './hexagrams.js';
 
-export { STROKES, TRADITIONAL_ALIAS, lookupStrokes, isHanChar } from './strokes.js';
+export { STROKES, TRADITIONAL_ALIAS, STROKES_SOURCE, lookupStrokes, isHanChar } from './strokes.js';
 export type { StrokeEntry, StrokeLookup, StrokeStandard } from './strokes.js';

@@ -1,10 +1,9 @@
 <script setup lang="ts">
 /** 设置面板 —— 06 §二「设置（右上角图标入口，非 Tab）」+ FR-10 设置项 */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { METHOD_CN, VERIFY_STATUS_CN, lineName, type HexagramRecord } from '@plumora/core';
+import { methodCn as methodCnOf, VERIFY_STATUS_CN, lineName, type HexagramRecord } from '@plumora/core';
 import { getHexagramByCode } from '@plumora/knowledge';
 import ConfirmDialog from '@/components/ConfirmDialog.vue';
-import QrCodeDialog from '@/components/QrCodeDialog.vue';
 import SegControl from '@/components/SegControl.vue';
 import { APP_NAME, APP_STAGE, APP_VERSION_LABEL } from '@/generated/version';
 
@@ -21,6 +20,7 @@ import {
   toExportBundle,
 } from '@/platform/records';
 import type { ThemeMode } from '@/platform/settings';
+import { openQr } from '@/stores/qrDialog';
 import { updateSetting, useSettings } from '@/stores/settings';
 import { toast } from '@/stores/toast';
 import { refreshRecords } from '@/stores/records';
@@ -30,7 +30,8 @@ const emit = defineEmits<{ close: [] }>();
 
 const settings = useSettings();
 const confirmClear = ref(false);
-const qrOpen = ref(false);
+/* 二维码弹窗不在本组件里：开关走 stores/qrDialog 的共享状态，
+   弹窗本体只在 App.vue 渲染一份（顶栏/侧栏图标与这里共用同一份）。 */
 
 const strokeOptions = [
   { value: 'SIMPLIFIED' as const, label: '简体' },
@@ -41,7 +42,6 @@ const methodOptions = [
   { value: 'TIME' as const, label: '时间' },
   { value: 'NUMBER' as const, label: '数字' },
   { value: 'CHARACTER' as const, label: '汉字' },
-  { value: 'SOUND' as const, label: '声音' },
 ];
 
 const tiYongOptions = [
@@ -95,7 +95,7 @@ const csvLookup = {
     return lineName(r.movingLine, yang);
   },
   tiYong: (r: HexagramRecord) => `体${r.tiTrigram}用${r.yongTrigram}`,
-  methodCn: (r: HexagramRecord) => METHOD_CN[r.method],
+  methodCn: (r: HexagramRecord) => methodCnOf(r.method),
   verifyCn: (r: HexagramRecord) => VERIFY_STATUS_CN[r.verifyStatus],
 };
 
@@ -161,7 +161,14 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <Teleport to="body">
+  <!--
+    弹层宿主是 #app 而不是 body：非预览态两者等价（#app 无 transform，
+    position: fixed 照旧相对视口）；手机框预览态下 #app 带 transform，
+    成了这些 fixed 元素的包含块，遮罩与抽屉才会被机身屏幕裁住、不溢出到舞台。
+    #app 是 index.html 里的静态节点，挂载时一定找得到（同级目标不行：
+    Vue 会先把子树建完再把根插入文档，选择器那时还查不到）。
+  -->
+  <Teleport to="#app">
     <div class="mask" :class="{ open }" @click="emit('close')" />
     <aside ref="panelEl" class="panel" :class="{ open }" aria-label="设置">
       <header class="panel-head">
@@ -219,7 +226,7 @@ onBeforeUnmount(() => {
             aria-label="布局形态"
           />
           <p class="note">
-            「自动」按视口宽度切换（≥ 900px 为电脑形态）；选「电脑」或「手机」则固定下来，不再随窗口宽度变化。顶栏与侧栏的切换按钮只在这两者之间互换，要回到「自动」请在此选择。
+            「自动」按视口宽度切换（≥ 900px 为电脑形态）；选「电脑」或「手机」则固定下来，不再随窗口宽度变化。顶栏与侧栏的切换按钮只在这两者之间互换，要回到「自动」请在此选择。宽屏上处于「手机」形态时会自动套上真机框预览（390 × 844 机身），点顶栏的框图标可退出或再次进入。
           </p>
         </section>
 
@@ -249,7 +256,7 @@ onBeforeUnmount(() => {
 
         <section class="group">
           <span class="group-label">跨设备</span>
-          <button type="button" class="btn-ghost block" @click="qrOpen = true">
+          <button type="button" class="btn-ghost block" @click="openQr">
             <span class="qr-btn">
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M4 4h6v6H4zM6 6h2v2H6zM14 4h6v6h-6zM16 6h2v2h-2zM4 14h6v6H4zM6 16h2v2H6z" />
@@ -277,7 +284,7 @@ onBeforeUnmount(() => {
     </aside>
   </Teleport>
 
-  <QrCodeDialog :open="qrOpen" @close="qrOpen = false" />
+  <!-- 二维码弹窗上移到 App.vue（与顶栏/侧栏的扫码图标共用 stores/qrDialog 状态） -->
 
   <ConfirmDialog
     :open="confirmClear"

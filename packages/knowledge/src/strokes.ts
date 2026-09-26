@@ -1,14 +1,31 @@
 /* ============================================================
- * 汉字笔画映射 —— 对应 docs/dev/05-卦象知识库设计.md v1.4 §4.1 / §4.2
+ * 汉字笔画映射 —— 对应 docs/dev/05-卦象知识库设计.md §4.1 / §4.2
  *
- * ⚠️ 当前为 MVP 子集（约 120 个高频字），与 UI 原型口径一致。
- *    正式版需扩充至「通用规范汉字表一级 3500 + 二级 4500」并按 §4.2 抽样校验。
- *    扩充时必须逐字比对辞书，**不得批量推测**。
+ * 本文件是**装配层**（数据在别的文件里，这里只负责组装 + 查表）：
+ *   ① 底座 strokes.generated.ts —— 由 scripts/build-strokes.mjs 从 Unicode Unihan
+ *      18.0 生成的**全量表**，收字域 = URO + 扩展 A（与 {@link isHanChar} 一致，
+ *      27,584 字，域内逐字有值，构建期已校验覆盖率与 1–84 值域）。
+ *   ② 覆盖层 strokes-overrides.ts —— 现役 117 字 / 30 对别名权威冻结 +
+ *      hanzi-writer-data 对拍裁决（详见该文件头的优先级说明）。
+ *   ③ 深冻结后导出 {@link STROKES} / {@link TRADITIONAL_ALIAS}；查表逻辑本身
+ *      与 05 §4.1 口径一致（直接键 → 别名归一 → 手动表 → null），未改。
+ *
+ * 重新生成：npm run knowledge:build（生成物不接入 verify，CI 不重新生成）
  *
  * 查表口径（05 §4.1）：
  *   - 表键一律为**简体字面**，繁体笔画由 `t` 字段承载（缺省视为与简体相同）
  *   - 繁体字面（如「觀」）经 {@link TRADITIONAL_ALIAS} 归一到简体字面后取值
  * ============================================================ */
+
+import {
+  GENERATED_ADJUDICATOR,
+  GENERATED_AT,
+  GENERATED_ALIAS_LINES,
+  GENERATED_DOMAIN_SIZE,
+  GENERATED_ENTRY_LINES,
+  GENERATED_UNICODE_VERSION,
+} from './strokes.generated.js';
+import { BASELINE_STROKES, BASELINE_TRADITIONAL_ALIAS } from './strokes-overrides.js';
 
 export type StrokeStandard = 'SIMPLIFIED' | 'TRADITIONAL';
 
@@ -19,44 +36,100 @@ export interface StrokeEntry {
   readonly t?: number;
 }
 
-/** 笔画录入表（未冻结）—— 键为简体字面，勿直接导出 */
-const STROKE_TABLE: Readonly<Record<string, StrokeEntry>> = {
-  一: { s: 1 }, 二: { s: 2 }, 三: { s: 3 }, 四: { s: 5 }, 五: { s: 4 }, 六: { s: 4 }, 七: { s: 2 }, 八: { s: 2 }, 九: { s: 2 }, 十: { s: 2 },
-  人: { s: 2 }, 大: { s: 3 }, 小: { s: 3 }, 中: { s: 4 }, 上: { s: 3 }, 下: { s: 3 }, 心: { s: 4 }, 手: { s: 4 }, 口: { s: 3 }, 目: { s: 5 },
-  日: { s: 4 }, 月: { s: 4 }, 年: { s: 6 }, 时: { s: 7, t: 10 }, 分: { s: 4 }, 天: { s: 4 }, 地: { s: 6 }, 水: { s: 4 }, 火: { s: 4 }, 山: { s: 3 },
-  石: { s: 5 }, 田: { s: 5 }, 土: { s: 3 }, 金: { s: 8 }, 木: { s: 4 }, 风: { s: 4, t: 9 }, 云: { s: 4, t: 12 }, 雨: { s: 8 }, 雪: { s: 11 }, 雷: { s: 13 },
-  电: { s: 5, t: 13 }, 龙: { s: 5, t: 16 }, 马: { s: 3, t: 10 }, 牛: { s: 4 }, 羊: { s: 6 }, 鸟: { s: 5, t: 11 }, 鱼: { s: 8, t: 11 }, 虫: { s: 6 },
-  梅: { s: 11, t: 11 }, 花: { s: 7, t: 8 }, 观: { s: 6, t: 25 }, 音: { s: 9 }, 乐: { s: 5, t: 15 }, 问: { s: 6, t: 11 }, 事: { s: 8 }, 吉: { s: 6 }, 凶: { s: 4 },
-  春: { s: 9 }, 夏: { s: 10 }, 秋: { s: 9 }, 冬: { s: 5 }, 东: { s: 5, t: 8 }, 南: { s: 9 }, 西: { s: 6 }, 北: { s: 5 }, 国: { s: 8, t: 11 }, 家: { s: 10 },
-  学: { s: 8, t: 16 }, 开: { s: 4, t: 12 }, 门: { s: 3, t: 8 }, 见: { s: 4, t: 7 }, 书: { s: 4, t: 10 }, 画: { s: 8, t: 12 }, 长: { s: 4, t: 8 }, 飞: { s: 3, t: 9 },
-  爱: { s: 10, t: 13 }, 无: { s: 4, t: 12 }, 明: { s: 8 }, 白: { s: 5 }, 玉: { s: 5 }, 王: { s: 4 }, 君: { s: 7 }, 臣: { s: 6 }, 民: { s: 5 },
-  生: { s: 5 }, 老: { s: 6 }, 子: { s: 3 }, 女: { s: 3 }, 男: { s: 7 }, 道: { s: 12 }, 德: { s: 15 }, 福: { s: 13 }, 禄: { s: 12 }, 寿: { s: 7, t: 14 },
-  财: { s: 7, t: 10 }, 官: { s: 8 }, 病: { s: 10 }, 药: { s: 9, t: 19 }, 医: { s: 7, t: 18 }, 婚: { s: 11 }, 姻: { s: 9 }, 情: { s: 11 },
-  考: { s: 6 }, 试: { s: 8, t: 13 }, 工: { s: 3 }, 作: { s: 7 }, 司: { s: 5 }, 公: { s: 4 }, 旅: { s: 10 }, 行: { s: 6 }, 住: { s: 7 },
-  宅: { s: 6 }, 屋: { s: 9 }, 车: { s: 4, t: 7 }, 路: { s: 13 }, 桥: { s: 10, t: 16 }, 船: { s: 11 },
-};
-
 /**
- * 繁体字面 → 简体字面别名表（05 文档 §4.1）。
- *
- * 只登记「繁体形与简体形不同」且已在 {@link STROKE_TABLE} 中收字的字。
- * 笔画**数值**一律由 `t` 字段提供，不在此处重复录入 —— 同一数值在仓库里
- * 出现两份必然改一处漏一处（这正是本表用别名而非并列键的原因）。
+ * 解析生成条目行。形态：`字:s` 或 `字:s:t`，`;` 分隔、每行 64 条（05 §4.1）。
+ * `t` 在生成期就已按「与 s 同值则省略」裁剪，这里原样还原。
  */
-export const TRADITIONAL_ALIAS: Readonly<Record<string, string>> = Object.freeze({
-  時: '时', 風: '风', 雲: '云', 電: '电', 龍: '龙', 馬: '马', 鳥: '鸟', 魚: '鱼',
-  觀: '观', 樂: '乐', 問: '问', 東: '东', 國: '国', 學: '学', 開: '开', 門: '门',
-  見: '见', 書: '书', 畫: '画', 長: '长', 飛: '飞', 愛: '爱', 無: '无', 壽: '寿',
-  財: '财', 藥: '药', 醫: '医', 試: '试', 車: '车', 橋: '桥',
-});
+function parseEntryLines(lines: readonly string[]): Record<string, StrokeEntry> {
+  const table: Record<string, StrokeEntry> = {};
+  for (const line of lines) {
+    for (const item of line.split(';')) {
+      if (item === '') continue;
+      const first = item.indexOf(':');
+      const second = item.indexOf(':', first + 1);
+      const ch = item.slice(0, first);
+      const s = Number(item.slice(first + 1, second < 0 ? undefined : second));
+      table[ch] = second < 0 ? { s } : { s, t: Number(item.slice(second + 1)) };
+    }
+  }
+  return table;
+}
+
+/** 解析生成别名行。形态：`繁:简`，`;` 分隔 —— 只有字面，没有数值 */
+function parseAliasLines(lines: readonly string[]): Record<string, string> {
+  const table: Record<string, string> = {};
+  for (const line of lines) {
+    for (const item of line.split(';')) {
+      if (item === '') continue;
+      const i = item.indexOf(':');
+      table[item.slice(0, i)] = item.slice(i + 1);
+    }
+  }
+  return table;
+}
+
+/** 笔画录入表（未冻结）—— 键为简体字面，勿直接导出 */
+const STROKE_TABLE: Record<string, StrokeEntry> = parseEntryLines(GENERATED_ENTRY_LINES);
+// 覆盖层优先级 ①：现役 117 字**逐字段**覆盖（与 strokes-overrides.ts 声明的合并
+// 语义、以及构建期的合并结果一致）——写了 t 就覆盖 t，没写 t 则沿用生成值，
+// 只有 s 被改写；整条替换会把「现表只给 s、繁体面靠生成值」的字（如 禄）打断。
+for (const [ch, b] of Object.entries(BASELINE_STROKES)) {
+  const t = b.t !== undefined ? b.t : STROKE_TABLE[ch]?.t;
+  STROKE_TABLE[ch] = t === undefined ? { s: b.s } : { s: b.s, t };
+}
+
+/** 繁体字面 → 简体字面别名表（未冻结）—— 覆盖层优先级 ① 的 30 对现役别名最后落位 */
+const ALIAS_TABLE: Record<string, string> = parseAliasLines(GENERATED_ALIAS_LINES);
+for (const [from, to] of Object.entries(BASELINE_TRADITIONAL_ALIAS)) ALIAS_TABLE[from] = to;
+
+/** 深冻结：表对象与其条目（`readonly` 只在编译期生效，见 05 §3.4 / C-9） */
+function deepFreezeTable<T extends object>(table: Record<string, T>): Readonly<Record<string, T>> {
+  for (const entry of Object.values(table)) Object.freeze(entry);
+  return Object.freeze(table);
+}
 
 /**
  * 字 → 笔画（冻结）。`readonly` 只在编译期生效，运行时仍可改写；
  * 知识库是全局共享单例，UI 若原地改写会污染所有调用方。
  */
-export const STROKES: Readonly<Record<string, StrokeEntry>> = Object.freeze(
-  Object.fromEntries(Object.entries(STROKE_TABLE).map(([k, v]) => [k, Object.freeze(v)])),
-);
+export const STROKES: Readonly<Record<string, StrokeEntry>> = deepFreezeTable(STROKE_TABLE);
+
+/**
+ * 繁体字面 → 简体字面别名表（05 文档 §4.1）。
+ *
+ * 只登记「繁体形与简体形不同」且**换面无歧义**的字（UAX #38 §3.7.1 case-4a：
+ * 简体字自身也出现在传统面列表里、或传统面指向多个简体字时，不建别名、
+ * `t` 按字面取，不猜）。笔画**数值**一律由 `t` 字段提供，不在此处重复录入 ——
+ * 同一数值在仓库里出现两份必然改一处漏一处。
+ */
+export const TRADITIONAL_ALIAS: Readonly<Record<string, string>> = Object.freeze(ALIAS_TABLE);
+
+/**
+ * 数据溯源（供 UI「数据来源」页与测试断言）：
+ * 底座版本、对拍 oracle、生成时间与规模。字段值全部来自生成物，改数据须重跑
+ * `npm run knowledge:build`。
+ */
+export const STROKES_SOURCE: Readonly<{
+  /** Unicode Unihan 版本（kTotalStrokes / 变体字段来源） */
+  readonly unicode: string;
+  /** 对拍 oracle（离线裁决期使用，不随本仓库分发） */
+  readonly adjudicator: string;
+  /** 生成时间（UTC，仅溯源） */
+  readonly generatedAt: string;
+  /** 收字域码点数（URO + 扩展 A） */
+  readonly domainSize: number;
+  /** 表键数（含覆盖层） */
+  readonly keyCount: number;
+  /** 繁体别名条数（含覆盖层） */
+  readonly aliasCount: number;
+}> = Object.freeze({
+  unicode: GENERATED_UNICODE_VERSION,
+  adjudicator: GENERATED_ADJUDICATOR,
+  generatedAt: GENERATED_AT,
+  domainSize: GENERATED_DOMAIN_SIZE,
+  keyCount: Object.keys(STROKES).length,
+  aliasCount: Object.keys(TRADITIONAL_ALIAS).length,
+});
 
 export interface StrokeLookup {
   /** 该标准下的笔画数 */

@@ -3,7 +3,7 @@
  * Web 端以 localStorage 承载（单机、无云同步，与 NFR-03 一致）
  * ============================================================ */
 
-import type { CastMethod, TiYongRule } from '@plumora/core';
+import { METHOD_CN, type CastMethod, type TiYongRule } from '@plumora/core';
 import type { StrokeStandard } from '@plumora/knowledge';
 
 export type ThemeMode = 'LIGHT' | 'DARK' | 'SYSTEM';
@@ -52,12 +52,26 @@ export const DEFAULT_SETTINGS: Readonly<Settings> = {
   disclaimerAcknowledged: false,
 };
 
+/**
+ * 清洗默认起卦方式。
+ *
+ * 起卦方式会随产品决策增减（声音/点数起卦已下线），但 localStorage 里存的
+ * 是写入当时的值。不清洗的话，老用户升级后 `defaultCastMethod` 仍是 'SOUND'，
+ * 起卦页的方式选择器三项全不选中、点「起卦」也无反应——用户只会以为应用坏了。
+ */
+export function sanitizeCastMethod(value: unknown): CastMethod {
+  return typeof value === 'string' && value in METHOD_CN
+    ? (value as CastMethod)
+    : DEFAULT_SETTINGS.defaultCastMethod;
+}
+
 export function loadSettings(): Settings {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
     if (!raw) return { ...DEFAULT_SETTINGS };
     const parsed = JSON.parse(raw) as Partial<Settings>;
-    return { ...DEFAULT_SETTINGS, ...parsed };
+    const merged = { ...DEFAULT_SETTINGS, ...parsed };
+    return { ...merged, defaultCastMethod: sanitizeCastMethod(merged.defaultCastMethod) };
   } catch {
     return { ...DEFAULT_SETTINGS };
   }
@@ -100,7 +114,8 @@ export function watchSystemTheme(onChange: () => void): () => void {
 
 /* ---------- 布局形态 ---------- */
 
-function matchesDesktop(): boolean {
+/** 视口当前是否已达桌面断点（06 §6.2）。手机框预览也用它：窄屏 = 真机，不套框 */
+export function matchesDesktop(): boolean {
   if (typeof window === 'undefined' || !window.matchMedia) return false;
   return window.matchMedia(DESKTOP_QUERY).matches;
 }

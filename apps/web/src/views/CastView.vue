@@ -3,17 +3,16 @@
  * 起卦页（首页）—— 06 文档 §3.1
  *
  * 方式选择器记忆「默认起卦方式」设置（FR-10）；
- * 四种方式各自的输入区 + 拇指热区内的「起卦」主按钮（06 §一 原则 4）。
+ * 三种方式各自的输入区 + 拇指热区内的「起卦」主按钮（06 §一 原则 4）。
+ * 随机起卦不占方式选择器，走底部独立按钮（模拟「外应」，P2）。
  */
-import { computed, onActivated, onDeactivated, onMounted, reactive, ref } from 'vue';
+import { computed, onActivated, onDeactivated, onMounted, reactive, ref, watch } from 'vue';
 import {
   CastInputError,
   castByCharacter,
   castByNumber,
   castByRandom,
-  castBySound,
   castByTime,
-  castByTimeParts,
   castContext,
   hourBranchName,
   hourNumber,
@@ -21,7 +20,15 @@ import {
   type CastMethod,
 } from '@plumora/core';
 import { isHanChar, lookupStrokes, type StrokeStandard } from '@plumora/knowledge';
-import { solarlunarProvider } from '@plumora/lunar';
+import {
+  isValidSolarDate,
+  leapDays,
+  leapMonth,
+  lunar2solar,
+  lunarAt,
+  monthDays,
+  solarlunarProvider,
+} from '@plumora/lunar';
 import SegControl from '@/components/SegControl.vue';
 import { navigate } from '@/router';
 import { setCurrentCast } from '@/stores/cast';
@@ -36,7 +43,6 @@ const methodOptions = [
   { value: 'TIME' as const, label: '时间' },
   { value: 'NUMBER' as const, label: '数字' },
   { value: 'CHARACTER' as const, label: '汉字' },
-  { value: 'SOUND' as const, label: '声音' },
 ];
 
 /**
@@ -72,55 +78,250 @@ function stopTimer() {
 }
 
 onMounted(() => {
-  if (isTime.value) startTimer();
+  if (isTime.value && timeSource.value === 'NOW') startTimer();
 });
 onActivated(() => {
   now.value = new Date();
-  if (isTime.value) startTimer();
+  if (isTime.value && timeSource.value === 'NOW') startTimer();
 });
 onDeactivated(stopTimer);
 
+/* ---------- 手动输入时间（公历 / 农历） ---------- */
+
+/** 手动输入的年份范围（solarlunar 数据表范围，01 文档口径同为 1900–2100） */
+const YEAR_MIN = 1900;
+const YEAR_MAX = 2100;
+
+/** 时间来源：默认当前时刻（01 PRD FR-01）；「公历 / 农历」即手动输入入口 */
+type TimeSource = 'NOW' | 'SOLAR' | 'LUNAR';
+
+const timeSourceOptions = [
+  { value: 'NOW' as const, label: '当前时刻' },
+  { value: 'SOLAR' as const, label: '公历' },
+  { value: 'LUNAR' as const, label: '农历' },
+];
+
+const timeSource = ref<TimeSource>('NOW');
+const isManualTime = computed(() => timeSource.value !== 'NOW');
+
+/** 手动输入的原始值：保留字符串，才能区分「没填」与「填了非数字」（v-model.number 会把两者都变成 0） */
+type Field = string | number;
+
+const solarInput = reactive<{ y: Field; m: Field; d: Field; h: Field }>({
+  y: 0,
+  m: 0,
+  d: 0,
+  h: 0,
+});
+const lunarInput = reactive<{ y: Field; m: Field; d: Field; h: Field; leap: boolean }>({
+  y: 0,
+  m: 0,
+  d: 0,
+  h: 0,
+  leap: false,
+});
+
+/** 农历月份的中文数字（第 1 月称「正月」；「闰」前缀统一由提示文案拼一次，避免「闰闰六月」） */
+const CN_MONTHS = ['正', '二', '三', '四', '五', '六', '七', '八', '九', '十', '十一', '十二'] as const;
+
+const pad2 = (n: number) => String(n).padStart(2, '0');
+
+/** 以当前时刻预填手动输入（农历页签预填当前农历，用户从今天改起） */
+function prefillManualInputs() {
+  const base = now.value;
+  solarInput.y = base.getFullYear();
+  solarInput.m = base.getMonth() + 1;
+  solarInput.d = base.getDate();
+  solarInput.h = base.getHours();
+  const lu = lunarAt(base);
+  lunarInput.y = lu ? lu.lYear : base.getFullYear();
+  lunarInput.m = lu ? lu.lMonth : base.getMonth() + 1;
+  lunarInput.d = lu ? lu.lDay : base.getDate();
+  lunarInput.h = base.getHours();
+  lunarInput.leap = false;
+}
+prefillManualInputs();
+
+function isBlank(v: Field): boolean {
+  return typeof v === 'string' && v.trim() === '';
+}
+
+/** 输入 → 整数；空串 / 非整数（含 12.5、abc）返回 null，交由调用方给提示 */
+function intOf(v: Field): number | null {
+  const n = typeof v === 'string' ? (v.trim() === '' ? NaN : Number(v)) : v;
+  return Number.isInteger(n) ? n : null;
+}
+
+type Resolved = { ok: true; date: Date } | { ok: false; error: string };
+
+function parseFour(raw: Field[]): { ok: true; v: [number, number, number, number] } | { ok: false; error: string } {
+  if (raw.some(isBlank)) return { ok: false, error: '请填写完整的年月日时' };
+  const [y, m, d, h] = raw.map(intOf);
+  if (y === null || m === null || d === null || h === null) {
+    return { ok: false, error: '年月日时须为整数' };
+  }
+  if (y < YEAR_MIN || y > YEAR_MAX) {
+    return { ok: false, error: `请输入 ${YEAR_MIN}–${YEAR_MAX} 年之间的时间` };
+  }
+  if (h < 0 || h > 23) return { ok: false, error: '时须为 0–23 的整数' };
+  return { ok: true, v: [y, m, d, h] };
+}
+
+/** 公历页签 → 起卦用 Date（校验通过后交 castByTime 统一处理晚子时与年支） */
+function resolveSolar(): Resolved {
+  const parsed = parseFour([solarInput.y, solarInput.m, solarInput.d, solarInput.h]);
+  if (!parsed.ok) return parsed;
+  const [y, m, d, h] = parsed.v;
+  if (!isValidSolarDate(y, m, d)) {
+    return { ok: false, error: '公历日期无效，请检查月与日（如 2 月没有 30 日）' };
+  }
+  return { ok: true, date: new Date(y, m - 1, d, h) };
+}
+
+/** 农历页签 → 起卦用 Date（先换算回公历，跨年 / 跨月 / 晚子时位移全部交给 castByTime） */
+function resolveLunar(): Resolved {
+  const parsed = parseFour([lunarInput.y, lunarInput.m, lunarInput.d, lunarInput.h]);
+  if (!parsed.ok) return parsed;
+  const [y, m, d, h] = parsed.v;
+  if (m < 1 || m > 12) return { ok: false, error: '农历月须为 1–12 的整数' };
+  const isLeap = lunarInput.leap && leapMonth(y) === m;
+  const maxDay = isLeap ? leapDays(y) : monthDays(y, m);
+  if (maxDay < 1 || d < 1 || d > maxDay) {
+    return { ok: false, error: `农历日须为 1–${maxDay > 0 ? maxDay : 30} 的整数` };
+  }
+  const solar = lunar2solar(y, m, d, isLeap);
+  if (!solar) return { ok: false, error: '农历日期无效，请检查年月日与闰月' };
+  return { ok: true, date: new Date(solar.y, solar.m - 1, solar.d, h) };
+}
+
+function resolveManualTime(): Resolved {
+  return timeSource.value === 'SOLAR' ? resolveSolar() : resolveLunar();
+}
+
+/** 该年是否恰有当前所选月份的闰月（决定闰月开关是否可用） */
+const canLeap = computed(() => {
+  const y = intOf(lunarInput.y);
+  const m = intOf(lunarInput.m);
+  // m 须落在 1–12：leapMonth 对「无闰月」返回 0，不排除的话 m=0 会被误判为可勾选
+  return y !== null && m !== null && m >= 1 && m <= 12 && leapMonth(y) === m;
+});
+
+/** 年 / 月改动后若不再对应闰月，立刻取消勾选，避免「勾着却没生效」 */
+watch(canLeap, (ok) => {
+  if (!ok) lunarInput.leap = false;
+});
+
+const leapLabel = computed(() => {
+  const m = intOf(lunarInput.m);
+  return canLeap.value && m !== null ? `按闰${CN_MONTHS[m - 1]}月计` : '按闰月计';
+});
+
+/** 农历月字段提示：该年有闰月时明示是哪一个月 */
+const lunarMonthHint = computed(() => {
+  const y = intOf(lunarInput.y);
+  const m = intOf(lunarInput.m);
+  if (y === null || m === null || m < 1 || m > 12) return '';
+  return leapMonth(y) === m ? `该年有闰${CN_MONTHS[m - 1]}月` : '';
+});
+
+/** 农历日字段提示：封顶天数（闰月与非闰月不同） */
+const lunarDayHint = computed(() => {
+  const y = intOf(lunarInput.y);
+  const m = intOf(lunarInput.m);
+  if (y === null || m === null || m < 1 || m > 12) return '';
+  const max = lunarInput.leap && leapMonth(y) === m ? leapDays(y) : monthDays(y, m);
+  return max > 0 ? `共 ${max} 天` : '';
+});
+
+/** 时字段提示：换算成时辰地支（23 点即子时，晚子时位移由 castByTime 处理） */
+const hourHint = computed(() => {
+  const h = intOf(timeSource.value === 'SOLAR' ? solarInput.h : lunarInput.h);
+  if (h === null || h < 0 || h > 23) return '';
+  return `${hourBranchName(hourNumber(h))}时`;
+});
+
+/** 农历页签的公历回显（让用户核对换算结果） */
+const lunarEcho = computed(() => {
+  const r = resolveLunar();
+  return r.ok
+    ? `${r.date.getFullYear()}-${pad2(r.date.getMonth() + 1)}-${pad2(r.date.getDate())}`
+    : '';
+});
+
+/* ---------- 时间预演 ---------- */
+
 const timePreview = computed(() => {
+  const manual = isManualTime.value;
+  if (manual) {
+    const r = resolveManualTime();
+    if (!r.ok) {
+      return { valid: false, label: '时间待确认', shifted: false, clock: '', manual, error: r.error };
+    }
+    try {
+      const cast = castByTime(r.date, solarlunarProvider);
+      return {
+        valid: true,
+        label: cast.label,
+        shifted: cast.params.shifted,
+        clock: `${pad2(r.date.getHours())}:${pad2(r.date.getMinutes())}`,
+        manual,
+        error: '',
+      };
+    } catch {
+      return {
+        valid: false,
+        label: '农历转换失败',
+        shifted: false,
+        clock: '',
+        manual,
+        error: `请输入 ${YEAR_MIN}–${YEAR_MAX} 年之间的时间`,
+      };
+    }
+  }
   try {
     const cast = castByTime(now.value, solarlunarProvider);
     return {
-      ok: true as const,
+      valid: true,
       label: cast.label,
       shifted: cast.params.shifted,
-      detail: `年支 ${cast.params.yearBranchNo} ＋ 月 ${cast.params.lunarMonth} ＋ 日 ${cast.params.lunarDay} ＝ ${cast.params.s1}　＋ 时 ${cast.params.hourNo} ＝ ${cast.params.s2}`,
-      clock: `${String(now.value.getHours()).padStart(2, '0')}:${String(now.value.getMinutes()).padStart(2, '0')}:${String(now.value.getSeconds()).padStart(2, '0')}`,
+      clock: `${pad2(now.value.getHours())}:${pad2(now.value.getMinutes())}:${pad2(now.value.getSeconds())}`,
+      manual,
+      error: '',
     };
   } catch {
-    return { ok: false as const, label: '农历转换失败', shifted: false, detail: '请检查系统时间是否在 1900–2100 年之间', clock: '' };
+    return {
+      valid: false,
+      label: '农历转换失败',
+      shifted: false,
+      clock: '',
+      manual,
+      error: `请检查系统时间是否在 ${YEAR_MIN}–${YEAR_MAX} 年之间`,
+    };
   }
 });
 
-/** 手动修正（FR-01 / 03 §6.4）：允许用户直接指定农历月、日、时辰 */
-const manual = reactive({ enabled: false, month: 8, day: 15, hourNo: 7 });
-
-/** 当前年支序数（手动修正时年支仍取当前农历年） */
-const currentYearBranchNo = computed(() => {
-  const lu = solarlunarProvider.solar2lunar(
-    now.value.getFullYear(),
-    now.value.getMonth() + 1,
-    now.value.getDate(),
-  );
-  return lu ? ((((lu.lYear - 4) % 12) + 12) % 12) + 1 : 1;
+/** 切到手动输入就停掉每秒刷新（预演不再依赖 now）；切回当前时刻再恢复 */
+watch(timeSource, (src) => {
+  if (src === 'NOW') {
+    now.value = new Date();
+    startTimer();
+  } else {
+    stopTimer();
+  }
 });
-
-const manualLabel = computed(
-  () => `${manual.month} 月 ${manual.day} 日 ${hourBranchName(manual.hourNo)}时（手动修正）`,
-);
 
 /* ---------- 数字起卦 ---------- */
 
-const numMode = ref<'TWO' | 'ONE'>('TWO');
-const num1 = ref('');
-const num2 = ref('');
+/**
+ * Vue 3 的 v-model 对 `type="number"` 输入框会自动把值转成 number（空串仍为 ''），
+ * 所以这里和手动时间输入一样声明为 string | number，空判断走 isBlank()，
+ * 不能直接 .trim()（number 上没有这个方法，会抛 "trim is not a function"）。
+ */
+const num1 = ref<Field>('');
+const num2 = ref<Field>('');
 
 /* ---------- 汉字起卦 ---------- */
 
-const charMode = ref<'TWO' | 'ONE'>('TWO');
 const char1 = ref('');
 const char2 = ref('');
 /** 手动补充的笔画（04 §4.2「记住该字」的内存版） */
@@ -145,7 +346,6 @@ const strokeHint1 = computed(() => {
 });
 
 const strokeHint2 = computed(() => {
-  if (charMode.value === 'ONE') return '';
   const info = strokeInfo(char2.value);
   if (!info) return '';
   if ('invalid' in info) return '请输入汉字';
@@ -170,18 +370,6 @@ function confirmManual() {
   doCast();
 }
 
-/* ---------- 声音起卦 ---------- */
-
-const sound = reactive({ c1: 0, c2: 0 });
-function tap(which: 1 | 2) {
-  const key = which === 1 ? 'c1' : 'c2';
-  if (sound[key] < 999) sound[key] += 1;
-}
-function resetSound() {
-  sound.c1 = 0;
-  sound.c2 = 0;
-}
-
 /* ---------- 起卦 ---------- */
 
 const busy = ref(false);
@@ -189,16 +377,19 @@ const busy = ref(false);
 function buildCast(): CastResult | null {
   switch (method.value) {
     case 'TIME': {
-      if (manual.enabled) {
-        return castByTimeParts(currentYearBranchNo.value, manual.month, manual.day, manual.hourNo, {
-          label: manualLabel.value,
-        });
+      if (isManualTime.value) {
+        const resolved = resolveManualTime();
+        if (!resolved.ok) {
+          toast(resolved.error);
+          return null;
+        }
+        return castByTime(resolved.date, solarlunarProvider);
       }
       return castByTime(now.value, solarlunarProvider);
     }
     case 'NUMBER': {
       const v1 = Number(num1.value);
-      if (!num1.value.trim()) {
+      if (isBlank(num1.value)) {
         toast('请输入第一个数字');
         return null;
       }
@@ -206,19 +397,16 @@ function buildCast(): CastResult | null {
         toast('请输入 1 以上的数字');
         return null;
       }
-      if (numMode.value === 'TWO') {
-        if (!num2.value.trim()) {
-          toast('请输入第二个数字');
-          return null;
-        }
-        const v2 = Number(num2.value);
-        if (!Number.isInteger(v2) || v2 < 1) {
-          toast('请输入 1 以上的数字');
-          return null;
-        }
-        return castByNumber(v1, v2);
+      if (isBlank(num2.value)) {
+        toast('请输入第二个数字');
+        return null;
       }
-      return castByNumber(v1, null, hourNumber(now.value.getHours()));
+      const v2 = Number(num2.value);
+      if (!Number.isInteger(v2) || v2 < 1) {
+        toast('请输入 1 以上的数字');
+        return null;
+      }
+      return castByNumber(v1, v2);
     }
     case 'CHARACTER': {
       const c1 = char1.value.trim();
@@ -235,14 +423,6 @@ function buildCast(): CastResult | null {
         toast(`「${c1}」未收录笔画，请手动输入`);
         openManual(c1, 1);
         return null;
-      }
-      if (charMode.value === 'ONE') {
-        return castByCharacter({
-          strokes: [s1.strokes],
-          chars: [c1],
-          standard: standard.value,
-          hourNo: hourNumber(now.value.getHours()),
-        });
       }
       const c2 = char2.value.trim();
       if (!c2) {
@@ -266,15 +446,12 @@ function buildCast(): CastResult | null {
         second: now.value.getSeconds(),
       });
     }
-    case 'SOUND': {
-      if (sound.c1 < 1 || sound.c2 < 1) {
-        toast('两组至少各点按 1 次');
-        return null;
-      }
-      return castBySound(sound.c1, sound.c2);
-    }
-    default:
+    case 'RANDOM':
       return castByRandom();
+    default:
+      // 不可达分支：CastMethod 上已穷尽。真走到这里说明设置里残留了已下线的方式
+      // （如声音起卦），响亮失败好过静默返回 null —— 后者表现为「点了起卦没反应」。
+      throw new CastInputError(`未知的起卦方式：${String(method.value)}`);
   }
 }
 
@@ -299,16 +476,6 @@ function doRandomCast() {
   toast(`随机起卦：${castContext(cast)}`);
   navigate('/result');
 }
-
-/** 结果页顶部上下文预演（让用户在按按钮前就看到参数如何参与计算） */
-const previewContext = computed(() => {
-  if (manual.enabled) {
-    const s1 = currentYearBranchNo.value + manual.month + manual.day;
-    const s2 = s1 + manual.hourNo;
-    return `上卦 (${currentYearBranchNo.value}＋${manual.month}＋${manual.day}) mod 8 = ${s1 % 8 === 0 ? 8 : s1 % 8}；下卦 (${s2}) mod 8 = ${s2 % 8 === 0 ? 8 : s2 % 8}；动爻 ${s2} mod 6 = ${s2 % 6 === 0 ? 6 : s2 % 6}`;
-  }
-  return '';
-});
 </script>
 
 <template>
@@ -324,54 +491,147 @@ const previewContext = computed(() => {
       <h3 class="card-title">年月日时起卦 · 农历自动转换</h3>
       <div class="time-preview serif">
         <b>{{ timePreview.label }}</b>
-        <span v-if="timePreview.shifted" class="shift-tag">晚子时 · 按次日计</span>
-        <span class="clock mono">{{ timePreview.clock }}</span>
+        <span class="time-meta">
+          <span v-if="timePreview.manual" class="tag-pill manual">手动输入</span>
+          <span v-if="timePreview.shifted" class="tag-pill shift">晚子时 · 按次日计</span>
+          <span v-if="timePreview.clock" class="clock mono">{{ timePreview.clock }}</span>
+        </span>
       </div>
-      <p class="detail mono">{{ timePreview.detail }}</p>
+      <p v-if="timePreview.error" class="preview-error" role="status">{{ timePreview.error }}</p>
 
-      <label class="toggle">
-        <input v-model="manual.enabled" type="checkbox" />
-        <span>手动修正农历（当自动转换与实际不符时）</span>
-      </label>
+      <!-- 时间来源：默认当前时刻；公历 / 农历即手动输入入口 -->
+      <SegControl
+        v-model="timeSource"
+        :options="timeSourceOptions"
+        compact
+        aria-label="时间来源"
+        class="time-source"
+      />
 
-      <div v-if="manual.enabled" class="manual-grid">
-        <div class="field">
-          <label for="manual-month">农历月</label>
-          <input id="manual-month" v-model.number="manual.month" type="number" min="1" max="12" />
+      <!-- 手动输入 · 公历 -->
+      <div v-if="timeSource === 'SOLAR'" class="time-inputs">
+        <div class="time-grid">
+          <div class="field">
+            <label for="s-year">公历年</label>
+            <input
+              id="s-year"
+              v-model="solarInput.y"
+              type="number"
+              inputmode="numeric"
+              placeholder="1900"
+            />
+          </div>
+          <div class="field">
+            <label for="s-month">月</label>
+            <input
+              id="s-month"
+              v-model="solarInput.m"
+              type="number"
+              min="1"
+              max="12"
+              inputmode="numeric"
+              placeholder="1–12"
+            />
+          </div>
+          <div class="field">
+            <label for="s-day">日</label>
+            <input
+              id="s-day"
+              v-model="solarInput.d"
+              type="number"
+              min="1"
+              max="31"
+              inputmode="numeric"
+              placeholder="1–31"
+            />
+          </div>
+          <div class="field">
+            <label for="s-hour">时</label>
+            <input
+              id="s-hour"
+              v-model="solarInput.h"
+              type="number"
+              min="0"
+              max="23"
+              inputmode="numeric"
+              placeholder="0–23"
+            />
+            <span class="hint">{{ hourHint }}</span>
+          </div>
         </div>
-        <div class="field">
-          <label for="manual-day">农历日</label>
-          <input id="manual-day" v-model.number="manual.day" type="number" min="1" max="30" />
-        </div>
-        <div class="field">
-          <label for="manual-hour">时辰</label>
-          <select id="manual-hour" v-model.number="manual.hourNo">
-            <option v-for="h in 12" :key="h" :value="h">{{ hourBranchName(h) }}时</option>
-          </select>
-        </div>
+        <p class="input-note">年份限 1900–2100；公历自动换算农历与年支，23 点按晚子时（次日）计。</p>
       </div>
-      <p v-if="manual.enabled" class="detail mono">{{ previewContext }}</p>
 
-      <p class="rule">
-        上卦 =（年支＋月＋日）÷ 8 之余；下卦 = 再加时辰 ÷ 8 之余；动爻 = ÷ 6 之余（余 0 取 8 / 6）。
-      </p>
+      <!-- 手动输入 · 农历 -->
+      <div v-else-if="timeSource === 'LUNAR'" class="time-inputs">
+        <div class="time-grid">
+          <div class="field">
+            <label for="l-year">农历年</label>
+            <input
+              id="l-year"
+              v-model="lunarInput.y"
+              type="number"
+              inputmode="numeric"
+              placeholder="1900"
+            />
+          </div>
+          <div class="field">
+            <label for="l-month">月</label>
+            <input
+              id="l-month"
+              v-model="lunarInput.m"
+              type="number"
+              min="1"
+              max="12"
+              inputmode="numeric"
+              placeholder="1–12"
+            />
+            <span class="hint">{{ lunarMonthHint }}</span>
+          </div>
+          <div class="field">
+            <label for="l-day">日</label>
+            <input
+              id="l-day"
+              v-model="lunarInput.d"
+              type="number"
+              min="1"
+              max="30"
+              inputmode="numeric"
+              placeholder="1–30"
+            />
+            <span class="hint">{{ lunarDayHint }}</span>
+          </div>
+          <div class="field">
+            <label for="l-hour">时</label>
+            <input
+              id="l-hour"
+              v-model="lunarInput.h"
+              type="number"
+              min="0"
+              max="23"
+              inputmode="numeric"
+              placeholder="0–23"
+            />
+            <span class="hint">{{ hourHint }}</span>
+          </div>
+        </div>
+        <label v-if="canLeap" class="toggle leap">
+          <input v-model="lunarInput.leap" type="checkbox" />
+          <span>{{ leapLabel }}</span>
+        </label>
+        <p class="input-note">
+          农历自动换算公历与年支；年份限 1900–2100。
+          <span v-if="lunarEcho" class="mono echo">→ {{ lunarEcho }}</span>
+        </p>
+      </div>
     </section>
 
     <!-- 数字 -->
     <section v-else-if="isNumber" class="card panel">
       <h3 class="card-title">数字起卦</h3>
-      <SegControl
-        v-model="numMode"
-        compact
-        aria-label="数字起卦模式"
-        :options="[
-          { value: 'TWO', label: '报两个数字' },
-          { value: 'ONE', label: '报一个数字' },
-        ]"
-      />
       <div class="two-fields">
         <div class="field">
-          <label for="num-1">第一数（上卦）</label>
+          <label for="num-1">第一数</label>
           <input
             id="num-1"
             v-model="num1"
@@ -382,8 +642,8 @@ const previewContext = computed(() => {
             inputmode="numeric"
           />
         </div>
-        <div v-if="numMode === 'TWO'" class="field">
-          <label for="num-2">第二数（下卦）</label>
+        <div class="field">
+          <label for="num-2">第二数</label>
           <input
             id="num-2"
             v-model="num2"
@@ -396,8 +656,6 @@ const previewContext = computed(() => {
         </div>
       </div>
       <p class="rule">
-        <template v-if="numMode === 'TWO'">上 = 第一数 mod 8；下 = 第二数 mod 8；动 =（两数之和）mod 6。</template>
-        <template v-else>上 = 该数 mod 8；下与动爻以（该数 ＋ 当前时辰序数）计算。</template>
         正整数，上限 999,999,999；0 视为无效输入。
       </p>
     </section>
@@ -405,23 +663,14 @@ const previewContext = computed(() => {
     <!-- 汉字 -->
     <section v-else-if="isCharacter" class="card panel">
       <h3 class="card-title">汉字笔画起卦</h3>
-      <SegControl
-        v-model="charMode"
-        compact
-        aria-label="汉字起卦模式"
-        :options="[
-          { value: 'TWO', label: '两字起卦' },
-          { value: 'ONE', label: '一字起卦' },
-        ]"
-      />
       <div class="two-fields">
         <div class="field">
-          <label for="char-1">第一字（上卦）</label>
+          <label for="char-1">第一字</label>
           <input id="char-1" v-model="char1" type="text" maxlength="2" placeholder="如 梅" />
           <span class="hint">{{ strokeHint1 }}</span>
         </div>
-        <div v-if="charMode === 'TWO'" class="field">
-          <label for="char-2">第二字（下卦）</label>
+        <div class="field">
+          <label for="char-2">第二字</label>
           <input id="char-2" v-model="char2" type="text" maxlength="2" placeholder="如 花" />
           <span class="hint">{{ strokeHint2 }}</span>
         </div>
@@ -442,28 +691,8 @@ const previewContext = computed(() => {
       </div>
 
       <p class="rule">
-        两字：动爻 =（两字笔画和 ＋ 起卦秒数）÷ 6 之余（余 0 取 6）；一字：动爻 =（笔画总数 ＋ 时辰序数）÷ 6 之余。
         笔画标准：<b>{{ standardLabel }}</b>（设置中可切换，同一卦内必须统一）。
       </p>
-    </section>
-
-    <!-- 声音 -->
-    <section v-else class="card panel">
-      <h3 class="card-title">声音（点数）起卦</h3>
-      <p class="rule">闻声逐次点按计数：第一组为上卦，第二组为下卦，两组之和除以 6 取动爻。</p>
-      <div class="sound-grid">
-        <div class="sound-box">
-          <span class="tag">上卦组</span>
-          <span class="cnt serif">{{ sound.c1 }}</span>
-          <button type="button" class="sound-tap" @click="tap(1)">点 按</button>
-        </div>
-        <div class="sound-box">
-          <span class="tag">下卦组</span>
-          <span class="cnt serif">{{ sound.c2 }}</span>
-          <button type="button" class="sound-tap" @click="tap(2)">点 按</button>
-        </div>
-      </div>
-      <button type="button" class="btn-ghost block" @click="resetSound">归零</button>
     </section>
 
     <!-- 拇指热区内的主按钮（06 §一 原则 4） -->
@@ -501,23 +730,84 @@ const previewContext = computed(() => {
   letter-spacing: 1px;
 }
 
+.time-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
 .time-preview .clock {
   font-size: var(--fs-xs);
 }
 
-.shift-tag {
+/* 预演行下的输入错误提示（实时、不打断输入，与 toast 互补） */
+.preview-error {
+  margin-top: 6px;
+  text-align: center;
+  font-size: var(--fs-xs);
+  line-height: 1.7;
+  color: var(--c-accent);
+}
+
+.tag-pill {
   padding: 2px 8px;
   border-radius: var(--r-pill);
-  background: var(--c-accent-soft);
-  color: var(--c-accent);
   font-size: var(--fs-xs);
 }
 
-.detail {
-  display: block;
-  margin-top: 8px;
+.tag-pill.shift {
+  background: var(--c-accent-soft);
+  color: var(--c-accent);
+}
+
+.tag-pill.manual {
+  background: var(--c-second-soft);
+  color: var(--c-second);
+}
+
+.time-source {
+  margin-top: 14px;
+}
+
+.time-inputs {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+/* 年份最宽、其余等宽；窄屏下保证「1900–2100」这类占位不被挤掉 */
+.time-grid {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr 1fr 1fr;
+  gap: 8px;
+}
+
+.time-grid .field {
+  margin-bottom: 0;
+}
+
+.time-grid input {
+  padding: 10px 6px;
+  font-size: var(--fs-sm);
   text-align: center;
+}
+
+.time-inputs .toggle {
+  margin-top: 0;
+}
+
+.input-note {
+  font-size: var(--fs-xs);
   line-height: 1.7;
+  color: var(--c-muted);
+}
+
+.input-note .echo {
+  margin-left: 4px;
+  color: var(--c-ink);
 }
 
 .rule {
@@ -547,13 +837,6 @@ const previewContext = computed(() => {
   accent-color: var(--c-accent);
 }
 
-.manual-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
-  margin-top: 12px;
-}
-
 .two-fields {
   display: flex;
   gap: 10px;
@@ -580,50 +863,6 @@ const previewContext = computed(() => {
 
 .manual-box input {
   width: 90px;
-}
-
-.sound-grid {
-  display: flex;
-  gap: 12px;
-  margin-top: 12px;
-}
-
-.sound-box {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 14px 10px;
-  border: 1px solid var(--c-line);
-  border-radius: var(--r-lg);
-  background: var(--c-surface);
-}
-
-.sound-box .cnt {
-  font-size: 40px;
-  line-height: 1.1;
-  color: var(--c-accent);
-}
-
-.sound-tap {
-  width: 100%;
-  min-height: var(--tap-min);
-  border: 0;
-  border-radius: var(--r-md);
-  background: var(--c-ink);
-  color: var(--c-bg);
-  font-size: var(--fs-md);
-  letter-spacing: 4px;
-}
-
-.sound-tap:active {
-  transform: scale(0.97);
-}
-
-.block {
-  width: 100%;
-  margin-top: 12px;
 }
 
 .cast-actions {

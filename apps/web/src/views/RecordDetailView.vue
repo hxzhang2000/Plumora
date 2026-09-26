@@ -7,7 +7,7 @@
  */
 import { computed, onDeactivated, ref, watch } from 'vue';
 import {
-  METHOD_CN,
+  methodCn,
   VERIFY_STATUS_CN,
   VERIFY_STATUS_LIST,
   recordTitle,
@@ -97,11 +97,14 @@ const context = computed(() => {
   } catch {
     p = null;
   }
-  const parts: string[] = [METHOD_CN[rec.method], rec.lunarLabel];
+  const parts: string[] = [methodCn(rec.method), rec.lunarLabel];
   if (p) {
     switch (p.type) {
       case 'TIME':
-        parts.push(`年支${p.yearBranchNo}＋月${p.lunarMonth}＋日${p.lunarDay}，时${p.hourNo}`);
+        // 年月日时的事实标签已由 rec.lunarLabel 回显（「丙午年 八月十五 午时」，
+        // 与 core castContext 同一措辞），这里不再重复中间量算式；
+        // 晚子时按次日计是唯一需要补的事实。
+        if (p.shifted) parts.push('晚子时 · 按次日计');
         break;
       case 'NUMBER':
         parts.push(p.mode === 'TWO' ? `两数 ${p.n1}、${p.n2}` : `一数 ${p.n1}，时辰 ${p.hourNo}`);
@@ -112,9 +115,6 @@ const context = computed(() => {
             ? `${p.chars.map((c, i) => `「${c}」${p.strokes[i]} 画`).join(' · ')} · 秒 ${p.second}`
             : `「${p.chars[0]}」${p.strokes[0]} 画 · 时辰 ${p.hourNo}`,
         );
-        break;
-      case 'SOUND':
-        parts.push(`点数 ${p.count1}、${p.count2}`);
         break;
       case 'RANDOM':
         parts.push('随机取数（模拟外应）');

@@ -5,6 +5,9 @@ desktop.ini
 *.tmp
 *.log
 
+# ── 代码索引（CodeGraph 工具生成，按需重建，不入库）──
+.codegraph/
+
 # ── 编辑器 / IDE ─────────────────────────────────
 .idea/
 *.iml
@@ -20,6 +23,8 @@ keystore.properties
 # ── Node / 前端工程 ──────────────────────────────
 node_modules/
 dist/
+# 笔画表构建脚本的下载缓存（scripts/build-strokes.mjs 取 Unihan.zip 用，~8MB 不入库）
+scripts/.cache/
 .tmp-smoke-dist/
 *.tsbuildinfo
 coverage/
@@ -28,8 +33,8 @@ npm-debug.log*
 
 # ── 未来 Android 工程（M0 起按需启用）──────────────
 # ⚠️ 不要写裸 `build/` 或 `**/build/`：
-#    会把 docs/ui/build/（UI 原型的构建源，core.js / app.js / template.html / smoke.test.js）
-#    一并忽略掉。待 Android 工程建立后按模块显式写：
+#    会把仓库内**有意入库**的 build 目录一并忽略（历史上 `docs/ui/build/` 即属此类，
+#    该原型已随 Web 定稿删除）。待 Android 工程建立后按模块显式写：
 #    /app/build/
 #    /build/
 #    /.gradle/

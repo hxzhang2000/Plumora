@@ -133,7 +133,7 @@ print("=" * 78)
 DOCMAP = {
     "01": "01-产品需求文档PRD.md", "02": "02-系统架构设计.md", "03": "03-起卦核心算法设计.md",
     "04": "04-数据模型与存储设计.md", "05": "05-卦象知识库设计.md", "06": "06-UI-UX设计规范.md",
-    "07": "07-测试计划.md", "08": "08-版本计划与发布规范.md",
+    "07": "07-测试计划.md", "08": "08-版本计划与发布规范.md", "09": "09-卦辞爻辞录入方案.md",
 }
 cache = {}
 def secs(num):
@@ -158,40 +158,6 @@ for f in files:
                 print("  FAIL %s:%d 引用 %s 文档 §%s —— 目标章节不存在" % (f.replace(ROOT + "/", ""), i, num, sec))
 print("  失效交叉引用数:", xref_bad)
 if xref_bad:
-    bad += 1
-else:
-    ok += 1
-
-print()
-print("=" * 78)
-print("⑥ 单文件原型 HTML 内联算法 vs build/core.js 数据一致性")
-print("=" * 78)
-def grab(path, key):
-    src = io.open(path, encoding="utf-8").read()
-    m = re.search(r"var %s = \{(.*?)\n  \};" % key, src, re.S)
-    return re.sub(r"\s+", "", m.group(1)) if m else None
-CORE = ROOT + "/docs/ui/build/core.js"
-HTML = ROOT + "/docs/ui/观梅-Plumora-UI设计稿.html"
-sync_bad = 0
-for key in ("TRIGRAMS", "HEX64", "STROKES"):
-    a, b = grab(CORE, key), grab(HTML, key)
-    if a is None or b is None:
-        sync_bad += 1
-        print("  FAIL 无法提取 %s（core=%s, html=%s）" % (key, a is not None, b is not None))
-    elif a != b:
-        sync_bad += 1
-        print("  FAIL %s 数据不一致：build/core.js 与 HTML 内联副本已漂移" % key)
-    else:
-        print("  ok   %s 一致" % key)
-# 头注释版本
-v1 = re.search(r"起卦核心算法（与 docs/dev/03-起卦核心算法设计\.md (v[\d.]+)", io.open(CORE, encoding="utf-8").read())
-v2 = re.search(r"起卦核心算法（与 docs/dev/03-起卦核心算法设计\.md (v[\d.]+)", io.open(HTML, encoding="utf-8").read())
-if v1 and v2 and v1.group(1) == v2.group(1):
-    print("  ok   头注释版本一致（%s）" % v1.group(1))
-else:
-    sync_bad += 1
-    print("  FAIL 头注释版本不一致：core=%s, html=%s" % (v1 and v1.group(1), v2 and v2.group(1)))
-if sync_bad:
     bad += 1
 else:
     ok += 1

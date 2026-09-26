@@ -228,8 +228,10 @@ describe('C-3 繁体字面查笔画（05 §4.1：繁体字面也是合法输入�
     }
   });
 
-  it('未收录的繁体字仍返回 null（不臆造笔画）', () => {
-    expect(lookupStrokes('龘', 'TRADITIONAL')).toBeNull();
+  it('未收录（收字域之外）的字仍返回 null（不臆造笔画）', () => {
+    // 收字域 = URO + 扩展 A（域内 100% 收录），域外字如扩展 B 的 𠀀 查不到就该 null
+    expect(lookupStrokes('𠀀', 'TRADITIONAL')).toBeNull();
+    expect(lookupStrokes('龘', 'TRADITIONAL')).not.toBeNull(); // 域内字已全量收录（原 MVP 表的 miss 用例）
   });
 });
 

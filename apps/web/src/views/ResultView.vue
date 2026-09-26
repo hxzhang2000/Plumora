@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /** 排盘结果页 —— 06 §3.2；保存卦例后提供「查看」动作（06 §五） */
 import { computed, onActivated, ref } from 'vue';
-import { METHOD_CN, buildRecord, type ResolvedHexagram } from '@plumora/core';
+import { buildRecord, methodCn, type ResolvedHexagram } from '@plumora/core';
 import { TRIGRAMS } from '@plumora/knowledge';
 import ResultPanel from '@/components/ResultPanel.vue';
 import { enforceRecordLimit, insertRecord } from '@/platform/records';
@@ -26,7 +26,7 @@ const cast = computed(() => current.value?.cast ?? null);
 
 const title = computed(() => {
   const c = cast.value;
-  return c ? METHOD_CN[c.method] : '排盘';
+  return c ? methodCn(c.method) : '排盘';
 });
 
 async function save() {
@@ -60,7 +60,7 @@ const copyText = computed(() => {
   return [
     '【观梅 · Plumora 排盘】',
     current.value?.lunarLabel ?? '',
-    METHOD_CN[c.method],
+    methodCn(c.method),
     `本卦：${r.ben.name}（${TRIGRAMS[r.upper].name}上${TRIGRAMS[r.lower].name}下）动爻 ${r.movingLineName}`,
     `互卦：${r.hu.name}　变卦：${r.bian.name}`,
     `体：${TRIGRAMS[r.ti].name}　用：${TRIGRAMS[r.yong].name}`,

@@ -8,7 +8,6 @@ import {
   castByCharacter,
   castByNumber,
   castByRandom,
-  castBySound,
   castByTimeParts,
   ganzhiYearOf,
   inputParamsOf,
@@ -59,10 +58,9 @@ describe('§3.1 起卦计算', () => {
     expect(T(...pick(castByNumber(24, 24)))).toBe('坤/坤/6');
   });
 
-  it('TC-N04 一数 9 + H7 → 乾/坤/动爻 4', () => {
-    const r = castByNumber(9, null, 7);
-    expect(T(r.upper, r.lower, r.moving)).toBe('乾/坤/4');
-    expect(r.params.mode).toBe('ONE');
+  it('TC-N04 一数起卦已移除：仅传一个数（第二数缺失）→ CastInputError', () => {
+    expect(() => castByNumber(9, null as unknown as number)).toThrow(CastInputError);
+    expect(() => castByNumber(9, undefined as unknown as number)).toThrow(/第二数无效/);
   });
 
   it('TC-C01 梅(11)/花(8) 繁体，S=6（算例 B）→ 离/坤/动爻 1', () => {
@@ -78,11 +76,11 @@ describe('§3.1 起卦计算', () => {
     expect(r.params.sum).toBe(16);
   });
 
-  it('TC-C03 一字 16 画 + H7（一字模式不加秒）→ 坤/艮/动爻 5', () => {
-    const r = castByCharacter({ strokes: [16], chars: ['甲'], standard: 'SIMPLIFIED', hourNo: 7 });
-    expect(T(r.upper, r.lower, r.moving)).toBe('坤/艮/5');
-    expect(r.params.sum).toBe(23);
-    expect(r.params.second).toBeUndefined();
+  it('TC-C03 一字起卦已移除：单字输入 → CastInputError（汉字数须为 2 个）', () => {
+    expect(() => castByCharacter({ strokes: [16], chars: ['甲'], standard: 'SIMPLIFIED' }))
+      .toThrow(CastInputError);
+    expect(() => castByCharacter({ strokes: [16], chars: ['甲'], standard: 'SIMPLIFIED' }))
+      .toThrow(/汉字数须为 2 个/);
   });
 
   it('TC-C04 两字 A=2、B=2，S=2 → 动爻 6（6 mod 6 = 0 取 6）', () => {
@@ -102,10 +100,6 @@ describe('§3.1 起卦计算', () => {
     expect((inputParamsOf(a) as { second: number }).second).toBe(1);
   });
 
-  it('TC-S01 声音 5、3 → 巽/离/动爻 2', () => {
-    expect(T(...pick(castBySound(5, 3)))).toBe('巽/离/2');
-  });
-
   it('TC-B01 大数 999999999、999999999 不溢出，结果确定', () => {
     const r = castByNumber(999_999_999, 999_999_999);
     expect(r.params.sum).toBe(1_999_999_998);
@@ -118,8 +112,10 @@ describe('§3.1 起卦计算', () => {
     expect(() => castByNumber(-3, 8)).toThrow(CastInputError);
     expect(() => castByNumber(1_000_000_000, 8)).toThrow(CastInputError);
     expect(() => castByNumber(1.5, 8)).toThrow(CastInputError);
-    expect(() => castBySound(0, 3)).toThrow(CastInputError);
-    expect(() => castBySound(1, 1000)).toThrow(CastInputError);
+    // 第二数同样受约束（原由声音起卦的用例覆盖，声音移除后补在这里）
+    expect(() => castByNumber(8, 0)).toThrow(CastInputError);
+    expect(() => castByNumber(8, -3)).toThrow(CastInputError);
+    expect(() => castByNumber(8, 1.5)).toThrow(CastInputError);
   });
 });
 
@@ -191,8 +187,10 @@ describe('§3.5 笔画查询（05 文档 §4.1 口径）', () => {
     expect(lookupStrokes('观', 'SIMPLIFIED')?.strokes).toBe(6);
     expect(lookupStrokes('观', 'TRADITIONAL')?.strokes).toBe(25);
   });
-  it('TC-ST04 未收录字返回 null，不抛异常', () => {
-    expect(lookupStrokes('龘', 'SIMPLIFIED')).toBeNull();
+  it('TC-ST04 收字域之外的字返回 null，不抛异常', () => {
+    // 收字域 = URO + 扩展 A（域内已全量收录）；扩展 B 的 𠀀 不在域内 → null
+    expect(lookupStrokes('𠀀', 'SIMPLIFIED')).toBeNull();
+    expect(lookupStrokes('龘', 'SIMPLIFIED')).not.toBeNull(); // 域内字（原 MVP 表 miss 用例，现全量收录）
   });
   it('繁体缺省时回退简体并打标', () => {
     const r = lookupStrokes('山', 'TRADITIONAL');
@@ -285,31 +283,22 @@ describe('C-6 非整数一律拒绝（不再静默截断）', () => {
     expect(() => castByTimeParts(7.5, 8, 15, 7)).toThrow(CastInputError);
   });
 
-  it('数字起卦一数模式：时辰非整数拒绝', () => {
-    expect(() => castByNumber(9, null, 7.5)).toThrow(CastInputError);
-  });
-
-  it('汉字一字模式：时辰非整数拒绝', () => {
-    expect(() => castByCharacter({ strokes: [16], chars: ['甲'], standard: 'SIMPLIFIED', hourNo: 7.5 }))
-      .toThrow(CastInputError);
-  });
-
   it('合法整数仍照常通过（防过度收紧）', () => {
     expect(() => castByTimeParts(7, 8, 15, 7)).not.toThrow();
-    expect(() => castByNumber(9, null, 7)).not.toThrow();
+    expect(() => castByNumber(9, 7)).not.toThrow();
   });
 });
 
 describe('C-7 castByCharacter：chars 与 strokes 必须一一对应', () => {
-  it('长度不一致拒绝（旧实现会静默丢字或渲染 undefined）', () => {
+  it('长度不一致拒绝（合法两字输入 + 笔画数不等长 → 旧实现会静默丢字或渲染 undefined）', () => {
     expect(() =>
       castByCharacter({ strokes: [11, 8], chars: ['梅'], standard: 'TRADITIONAL', second: 0 }),
     ).toThrow(CastInputError);
     expect(() =>
-      castByCharacter({ strokes: [16], chars: [], standard: 'SIMPLIFIED', hourNo: 7 }),
+      castByCharacter({ strokes: [16], chars: ['梅', '花'], standard: 'SIMPLIFIED', second: 0 }),
     ).toThrow(CastInputError);
     expect(() =>
-      castByCharacter({ strokes: [16], chars: ['梅', '花'], standard: 'SIMPLIFIED', hourNo: 7 }),
+      castByCharacter({ strokes: [], chars: ['梅', '花'], standard: 'SIMPLIFIED', second: 0 }),
     ).toThrow(CastInputError);
   });
 
@@ -319,8 +308,7 @@ describe('C-7 castByCharacter：chars 与 strokes 必须一一对应', () => {
     ).toThrow(CastInputError);
   });
 
-  it('一字 / 两字正常用例不受影响', () => {
-    expect(castByCharacter({ strokes: [16], chars: ['甲'], standard: 'SIMPLIFIED', hourNo: 7 }).moving).toBe(5);
+  it('两字正常用例不受影响', () => {
     expect(castByCharacter({ strokes: [11, 8], chars: ['梅', '花'], standard: 'TRADITIONAL', second: 6 }).moving).toBe(1);
   });
 });

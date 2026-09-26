@@ -65,7 +65,8 @@ async function doCopy() {
 </script>
 
 <template>
-  <Teleport to="body">
+  <!-- 宿主 #app：预览态下即机身屏幕（说明见 SettingsPanel.vue 同处） -->
+  <Teleport to="#app">
     <Transition name="qr">
       <div v-if="open" class="mask" @click.self="emit('close')">
         <div

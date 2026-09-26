@@ -1,6 +1,10 @@
 /* ============================================================
- * 五种起卦方法 —— 对应 03 文档 §二
- *   §2.1 时间起卦  §2.2 数字起卦  §2.3 汉字笔画起卦  §2.4 声音起卦  §2.5 随机起卦
+ * 四种起卦方法 —— 对应 03 文档 §二
+ *   §2.1 时间起卦  §2.2 数字起卦  §2.3 汉字笔画起卦  §2.4 随机起卦
+ *
+ * 原 §2.4「声音（点数）起卦」已按产品决策移除；随机起卦顺延为 §2.4。
+ * 「一数起卦」与「一字起卦」同已移除，数字/汉字起卦仅保留两数、两字模式；
+ * 旧记录里 mode='ONE' 的数据仍可读（types.ts / inputParamsOf / castContext 保留兼容分支）。
  * ============================================================ */
 
 import type { StrokeStandard } from '@plumora/knowledge';
@@ -22,7 +26,6 @@ import {
   type InputParams,
   type NumberCast,
   type RandomCast,
-  type SoundCast,
   type TimeCast,
 } from './types.js';
 
@@ -124,32 +127,17 @@ export function castByTime(date: Date, lunar: LunarProvider): TimeCast {
 }
 
 /* ------------------------------------------------------------------
- * §2.2 数字起卦
+ * §2.2 数字起卦（仅两数模式；一数模式已移除，见 03 文档）
  * ------------------------------------------------------------------ */
 
 /**
- * 数字起卦。
+ * 数字起卦（**仅两数模式**；一数起卦已按产品决策移除，旧记录读取仍兼容）。
  * @param n1 第一数（上卦）
- * @param n2 第二数（下卦）；传 null/undefined 走「一数模式」
- * @param hourNo 一数模式所需的当前时辰序数（1–12）
+ * @param n2 第二数（下卦）——必填；缺失/无效抛 {@link CastInputError}（第二数无效）
  */
-export function castByNumber(n1: number, n2?: number | null, hourNo?: number): NumberCast {
+export function castByNumber(n1: number, n2: number): NumberCast {
   if (!isValidNumber(n1)) {
     throw new CastInputError(`第一数无效：${n1}（须为 1–${NUMBER_MAX} 的整数，0 无效）`);
-  }
-
-  if (n2 == null) {
-    if (hourNo == null || !Number.isInteger(hourNo) || hourNo < 1 || hourNo > 12) {
-      throw new CastInputError(`一数模式需要有效的时辰序数（1–12 的整数），实际 ${hourNo}`);
-    }
-    const s = n1 + hourNo;
-    return {
-      method: 'NUMBER',
-      upper: modTrigram(n1),
-      lower: modTrigram(s),
-      moving: modMoving(s),
-      params: { mode: 'ONE', n1, hourNo, sum: s },
-    };
   }
 
   if (!isValidNumber(n2)) {
@@ -166,28 +154,25 @@ export function castByNumber(n1: number, n2?: number | null, hourNo?: number): N
 }
 
 /* ------------------------------------------------------------------
- * §2.3 汉字笔画起卦
+ * §2.3 汉字笔画起卦（仅两字模式；一字模式已移除，见 03 文档）
  * ------------------------------------------------------------------ */
 
 export interface CharacterCastInput {
-  /** 两字模式传 [A, B]，一字模式传 [T] */
+  /** 两字模式的笔画数 [A, B]（一字起卦已移除，仅接受 2 个汉字） */
   readonly strokes: readonly number[];
   readonly chars: readonly string[];
   readonly standard: StrokeStandard;
-  /** 起卦瞬间秒钟数 0–59（仅两字模式参与动爻，03 文档 §6.5） */
+  /** 起卦瞬间秒钟数 0–59（参与动爻，03 文档 §6.5） */
   readonly second?: number;
-  /** 一字模式所需的时辰序数（1–12） */
-  readonly hourNo?: number;
 }
 
 /**
- * 汉字笔画起卦。
+ * 汉字笔画起卦（**仅两字模式**；一字起卦已按产品决策移除，旧记录读取仍兼容）。
  *
  * 两字：upper = A mod 8；lower = B mod 8；moving = (A + B + 秒) mod 6
- * 一字：upper = T mod 8；lower = (T + 时) mod 8；moving = (T + 时) mod 6（**不加秒**）
  */
 export function castByCharacter(input: CharacterCastInput): CharacterCast {
-  const { strokes, chars, standard, second, hourNo } = input;
+  const { strokes, chars, standard, second } = input;
 
   // chars 与 strokes 必须一一对应：不等长时字会静默丢失（`{strokes:[11,8],chars:['梅']}`
   // 会丢掉第二字）或渲染出「undefined 16 画」（`{strokes:[16],chars:[]}`）。
@@ -196,35 +181,12 @@ export function castByCharacter(input: CharacterCastInput): CharacterCast {
       `汉字数与笔画数必须一一对应：${chars.length} 个字 / ${strokes.length} 个笔画`,
     );
   }
-  if (chars.length === 0) {
-    throw new CastInputError('至少需要一个汉字');
-  }
-  if (chars.length > 2) {
-    throw new CastInputError(`汉字数须为 1 个（一字）或 2 个（两字），实际 ${chars.length}`);
-  }
-
-  if (strokes.length === 1) {
-    // 一字模式（03 文档 §6.5：不追加秒钟数）
-    const t = strokes[0];
-    if (!Number.isInteger(t) || t < 1) throw new CastInputError(`笔画数无效：${t}`);
-    if (hourNo == null || !Number.isInteger(hourNo) || hourNo < 1 || hourNo > 12) {
-      throw new CastInputError(`一字模式需要有效的时辰序数（1–12 的整数），实际 ${hourNo}`);
-    }
-    const s = t + hourNo;
-    return {
-      method: 'CHARACTER',
-      chars: [...chars],
-      strokes: [...strokes],
-      standard,
-      upper: modTrigram(t),
-      lower: modTrigram(s),
-      moving: modMoving(s),
-      params: { mode: 'ONE', strokes: [...strokes], hourNo, sum: s },
-    };
+  if (chars.length !== 2) {
+    throw new CastInputError(`汉字数须为 2 个（两字起卦，一字起卦已移除），实际 ${chars.length}`);
   }
 
   if (strokes.length !== 2) {
-    throw new CastInputError(`笔画数须为 1 个（一字）或 2 个（两字），实际 ${strokes.length}`);
+    throw new CastInputError(`笔画数须为 2 个（两字起卦），实际 ${strokes.length}`);
   }
   const [a, b] = strokes;
   if (!Number.isInteger(a) || a < 1 || !Number.isInteger(b) || b < 1) {
@@ -248,33 +210,7 @@ export function castByCharacter(input: CharacterCastInput): CharacterCast {
 }
 
 /* ------------------------------------------------------------------
- * §2.4 声音（点数）起卦
- * ------------------------------------------------------------------ */
-
-/** 单组计数上限（FR-04 边界） */
-export const SOUND_COUNT_MAX = 999;
-
-export function castBySound(count1: number, count2: number): SoundCast {
-  for (const [label, v] of [
-    ['上卦组', count1],
-    ['下卦组', count2],
-  ] as const) {
-    if (!Number.isInteger(v) || v < 1 || v > SOUND_COUNT_MAX) {
-      throw new CastInputError(`${label}点数无效：${v}（须为 1–${SOUND_COUNT_MAX} 的整数）`);
-    }
-  }
-  const sum = count1 + count2;
-  return {
-    method: 'SOUND',
-    upper: modTrigram(count1),
-    lower: modTrigram(count2),
-    moving: modMoving(sum),
-    params: { count1, count2, sum },
-  };
-}
-
-/* ------------------------------------------------------------------
- * §2.5 随机起卦（P2，模拟「外应」）
+ * §2.4 随机起卦（P2，模拟「外应」）
  * ------------------------------------------------------------------ */
 
 /** 可注入的随机源，便于测试（默认 crypto.getRandomValues） */
@@ -290,7 +226,7 @@ const defaultRandom: RandomSource = () => {
   return Math.random();
 };
 
-/** 随机起卦：上卦 1–8、下卦 1–8、动爻 1–6（03 文档 §2.5） */
+/** 随机起卦：上卦 1–8、下卦 1–8、动爻 1–6（03 文档 §2.4） */
 export function castByRandom(random: RandomSource = defaultRandom): RandomCast {
   const pick = (max: number): number => {
     const r = random();
@@ -355,8 +291,6 @@ export function inputParamsOf(cast: CastResult): InputParams {
             standard: cast.standard,
             hourNo: cast.params.hourNo as number,
           };
-    case 'SOUND':
-      return { type: 'SOUND', count1: cast.params.count1, count2: cast.params.count2 };
     case 'RANDOM':
       return {
         type: 'RANDOM',
@@ -377,22 +311,12 @@ export function castContext(cast: CastResult): string {
     case 'TIME':
       parts.push(cast.label);
       if (cast.params.shifted) parts.push('晚子时 · 按次日计');
-      parts.push(
-        `年支${cast.params.yearBranchNo}＋月${cast.params.lunarMonth}＋日${cast.params.lunarDay}＝${cast.params.s1}`,
-        `＋时${cast.params.hourNo}＝${cast.params.s2}`,
-      );
       break;
     case 'NUMBER':
       if (cast.params.mode === 'TWO') {
-        parts.push(
-          `两数 ${cast.params.n1}、${cast.params.n2}`,
-          `和 ${cast.params.sum} → 动爻取 ${cast.moving}`,
-        );
+        parts.push(`两数 ${cast.params.n1}、${cast.params.n2}`);
       } else {
-        parts.push(
-          `一数 ${cast.params.n1} ＋ 时辰 ${cast.params.hourNo}`,
-          `和 ${cast.params.sum} → 动爻取 ${cast.moving}`,
-        );
+        // 旧数据（一数模式）兼容分支保留结构；原算式文案已按产品要求整体移除
       }
       break;
     case 'CHARACTER':
@@ -400,21 +324,10 @@ export function castContext(cast: CastResult): string {
         parts.push(
           cast.chars.map((c, i) => `「${c}」${cast.strokes[i]} 画`).join(' · '),
           `秒 ${cast.params.second}`,
-          `和 ${cast.params.sum} → 动爻取 ${cast.moving}`,
         );
       } else {
-        parts.push(
-          `「${cast.chars[0]}」${cast.strokes[0]} 画`,
-          `＋时辰 ${cast.params.hourNo}`,
-          `和 ${cast.params.sum} → 动爻取 ${cast.moving}`,
-        );
+        parts.push(`「${cast.chars[0]}」${cast.strokes[0]} 画`);
       }
-      break;
-    case 'SOUND':
-      parts.push(
-        `点数 ${cast.params.count1}、${cast.params.count2}`,
-        `和 ${cast.params.sum} → 动爻取 ${cast.moving}`,
-      );
       break;
     case 'RANDOM':
       parts.push('随机取数（模拟外应）');

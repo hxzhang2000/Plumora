@@ -7,9 +7,11 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  METHOD_CN,
   RECORD_TITLE_FALLBACK,
   buildRecord,
   castByTimeParts,
+  methodCn,
   recordTitle,
   replayRecord,
   resolve,
@@ -152,5 +154,30 @@ describe('§3.7 卦例名称 recordTitle', () => {
 
     // 回放不受影响（体用取自落库列）
     expect(replayRecord(stored).ben.name).toBe('水风井');
+  });
+
+  /* ------------------------------------------------------------------
+   * 起卦方式下线后的旧数据兜底
+   * 声音（点数）起卦已移除，但旧卦例库里 method 仍是写入时的 'SOUND'。
+   * 展示层若直查 METHOD_CN 会拿到 undefined 并渲染出「undefined · …」。
+   * ------------------------------------------------------------------ */
+  describe('已下线的起卦方式：旧记录不得渲染出 undefined', () => {
+    it('methodCn 对在册方式照常返回中文', () => {
+      expect(methodCn('TIME')).toBe('时间起卦');
+      expect(methodCn('RANDOM')).toBe('随机起卦');
+    });
+
+    it('methodCn 对已下线 / 未知方式回退「其他方式」', () => {
+      expect(methodCn('SOUND')).toBe('其他方式');
+      expect(methodCn('')).toBe('其他方式');
+      expect(METHOD_CN['SOUND' as keyof typeof METHOD_CN]).toBeUndefined();
+    });
+
+    it('recordTitle 不把「其他方式」写进派生名称：旧声音起卦记录回退到农历 / 固定兜底串', () => {
+      const legacy = rec({ method: 'SOUND' as never, question: null, benGuaName: '' });
+      expect(recordTitle(legacy)).toBe('丙午年 八月十五 午时');
+      expect(recordTitle(legacy)).not.toContain('undefined');
+      expect(recordTitle({ ...legacy, lunarLabel: '' })).toBe(RECORD_TITLE_FALLBACK);
+    });
   });
 });

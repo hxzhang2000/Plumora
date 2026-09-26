@@ -1,7 +1,6 @@
 <script setup lang="ts">
 /**
  * 学习页 —— 06 §3.4
- *   起卦方法说明（五种 + 体用生克）
  *   八卦类象速查（类目与 05 §2.2 表头一致）
  *   六十四卦速查（8×8 宫格，行 = 上卦，列 = 下卦）
  */
@@ -15,42 +14,12 @@ import {
 import SegControl from '@/components/SegControl.vue';
 import TrigramGlyph from '@/components/TrigramGlyph.vue';
 
-type View = 'methods' | 'xx' | 'grid';
+type View = 'xx' | 'grid';
 
-const view = ref<View>('methods');
+const view = ref<View>('xx');
 const viewOptions = [
-  { value: 'methods' as const, label: '起卦方法' },
   { value: 'xx' as const, label: '八卦类象' },
   { value: 'grid' as const, label: '六十四卦' },
-];
-
-/* ---------- 起卦方法 ---------- */
-
-const METHODS = [
-  {
-    title: '① 时间起卦（年月日时）',
-    body: '年取农历地支序数（子 1 … 亥 12），月、日取农历数，时取时辰序数（子 1 … 亥 12）。\n上卦 =（年＋月＋日）mod 8；下卦 =（年＋月＋日＋时）mod 8；动爻 = 同和 mod 6。余 0 取 8 / 取 6。\n23:00 后为晚子时，按次日日数与子时起卦。闰月按本月份数计算。',
-  },
-  {
-    title: '② 数字起卦',
-    body: '两数：上 = 第一数 mod 8，下 = 第二数 mod 8，动 =（两数之和）mod 6。\n一数：上 = 该数 mod 8，下 =（该数＋时辰序数）mod 8，动 = 同和 mod 6。\n输入须为 1–999,999,999 的整数；0 视为无效输入。',
-  },
-  {
-    title: '③ 汉字笔画起卦',
-    body: '两字：上 = 第一字笔画 mod 8，下 = 第二字笔画 mod 8，动 =（两字笔画和＋起卦秒数）mod 6（余 0 取 6）。\n一字：上 = 笔画总数 mod 8，下 =（总数＋时辰序数）mod 8，动 = 同和 mod 6（一字模式不追加秒数）。\n笔画标准可选简体 / 繁体，同一卦内必须统一；未收录的字可手动输入笔画。',
-  },
-  {
-    title: '④ 声音（点数）起卦',
-    body: '闻声逐次点按计数：第一组次数为上卦，第二组为下卦，两组之和 mod 6 为动爻。\n单组计数上限 999，至少 1 次。',
-  },
-  {
-    title: '⑤ 随机起卦（模拟外应 · P2）',
-    body: '点击随机生成上卦 1–8、下卦 1–8、动爻 1–6。结果页标注「随机起卦」以与正统方法区分。',
-  },
-  {
-    title: '⑥ 体用生克（断卦核心）',
-    body: '动爻所在之卦为用，另一卦为体（通行口径；亦可在设置中切换为「上卦恒为用、下卦恒为体」的笔记流派）。\n用生体大吉；体克用小吉；体用比和吉；体生用小凶；用克体大凶。\n再参互卦看过程、变卦看结局，结合卦象类象综合判断。',
-  },
 ];
 
 /* ---------- 八卦类象 ---------- */
@@ -77,16 +46,8 @@ function pick(upper: TrigramNumber, lower: TrigramNumber) {
   <div class="learn">
     <SegControl v-model="view" :options="viewOptions" aria-label="学习内容" />
 
-    <!-- 起卦方法 -->
-    <section v-if="view === 'methods'" class="card">
-      <details v-for="(m, i) in METHODS" :key="m.title" class="method" :open="i === 0">
-        <summary>{{ m.title }}</summary>
-        <p>{{ m.body }}</p>
-      </details>
-    </section>
-
     <!-- 八卦类象 -->
-    <template v-else-if="view === 'xx'">
+    <template v-if="view === 'xx'">
       <div class="chips">
         <button
           v-for="t in TRIGRAM_LIST"
@@ -164,47 +125,6 @@ function pick(upper: TrigramNumber, lower: TrigramNumber) {
   display: flex;
   flex-direction: column;
   gap: 14px;
-}
-
-/* ---------- 起卦方法 ---------- */
-
-.method {
-  border-bottom: 1px solid var(--c-line);
-}
-
-.method:last-child {
-  border-bottom: 0;
-}
-
-.method summary {
-  padding: 12px 2px;
-  font-size: var(--fs-base);
-  font-weight: 600;
-  cursor: pointer;
-  list-style: none;
-}
-
-.method summary::-webkit-details-marker {
-  display: none;
-}
-
-.method summary::after {
-  content: '＋';
-  float: right;
-  color: var(--c-muted);
-  font-weight: 400;
-}
-
-.method[open] summary::after {
-  content: '－';
-}
-
-.method p {
-  padding: 0 2px 14px;
-  font-size: var(--fs-sm);
-  line-height: 1.9;
-  color: var(--c-muted);
-  white-space: pre-line;
 }
 
 /* ---------- 八卦类象 ---------- */

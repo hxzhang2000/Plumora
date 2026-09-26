@@ -143,6 +143,9 @@ export function recordTitle(
   const guaName = (rec.benGuaName ?? '').trim();
   if (guaName) return guaName;
 
+  // 直查 METHOD_CN 而非 methodCn()：已下线的方式（如声音起卦）在旧记录里仍有值，
+  // 这里**不给片段**（undefined 被 filter 掉），让名称继续回退到卦名 / 固定兜底串，
+  // 而不是把「其他方式」写进派生名称。界面上的方式标签另走 methodCn() 容错。
   const parts = [METHOD_CN[rec.method], (rec.lunarLabel ?? '').trim()].filter(Boolean);
   return parts.length ? parts.join(' · ') : RECORD_TITLE_FALLBACK;
 }

@@ -40,6 +40,22 @@
           lm === 'DESKTOP' ||
           (lm === 'AUTO' && window.matchMedia('(min-width: 900px)').matches);
         root.setAttribute('data-layout', desk ? 'desk' : 'mobile');
+
+        // 手机框预览也要在样式生效前定好，否则「强制手机形态 + 宽屏」的用户
+        // 会先看到一整屏再收进机身。判据与 src/platform/deviceFrame.ts 一致
+        // （宽屏 + 手机形态；真机窄屏恒不命中），尺寸常量同见该文件。
+        if (!desk && window.matchMedia('(min-width: 900px)').matches) {
+          root.setAttribute('data-device', 'phone');
+          root.style.setProperty(
+            '--frame-scale',
+            String(
+              Math.max(
+                0.4,
+                Math.min(1, (window.innerWidth - 72) / 390, (window.innerHeight - 96) / 844),
+              ),
+            ),
+          );
+        }
       } catch (e) {
         root.setAttribute('data-theme', 'light');
         root.setAttribute('data-layout', 'mobile');

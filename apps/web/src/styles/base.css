@@ -18,6 +18,12 @@ body,
   height: 100%;
 }
 
+/* 显式写 width 而不是留 auto：手机框预览要在 100% ↔ 390px 之间做过渡，
+   width 的计算值是 auto 的话过渡只会「跳」不会「滑」（见 styles/frame.css）。 */
+#app {
+  width: 100%;
+}
+
 body {
   font-family: var(--font-sans);
   font-size: var(--fs-base);

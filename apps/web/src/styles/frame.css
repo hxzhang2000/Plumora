@@ -1,0 +1,208 @@
+/* ============================================================
+ * 手机框预览（真机框）样式
+ *
+ * 判据：<html data-device="phone"> —— 由 stores/deviceFrame.ts 写入，
+ * 只在「宽屏 + 手机形态」且用户未手动退出时存在；真机窄屏永远拿不到这个属性，
+ * 本文件除两组「常驻零尺寸节点」外不命中任何选择器，响应式布局不受影响。
+ *
+ * 预览态的结构：
+ *   <body>                    舞台：宣纸/暗色渐变底 + 左右机身侧键
+ *     #app                    机身屏幕 390 × 844（逻辑像素恒定，等比缩放适配窗口）
+ *       （padding 36/16）     顶部让出灵动岛、底部让出 Home 指示条
+ *       .shell                应用本体 —— data-layout='mobile' 的移动形态原样跑在里面
+ *
+ * 退出预览只有一个入口：顶栏的 DeviceFrameToggle（机身下方不再放第二处按钮）。
+ *
+ * 两个关键点：
+ *   1. #app 带 transform → 成为内部所有 position:fixed 元素的包含块，
+ *      遮罩/抽屉/Toast（弹层已 Teleport 到 #app）因此被裁在屏幕内，不溢出舞台；
+ *   2. transform 只缩放「看得见的大小」，框内仍按 390px 排版 —— 缩放系数写在
+ *      --frame-scale（stores/deviceFrame.ts 随窗口尺寸计算）。
+ * ============================================================ */
+
+/* ------------------------------------------------------------
+ * 常驻节点：几何尺寸平时就写好、opacity=0 藏起来。
+ * 为什么不等进框再生成 —— content / 尺寸无法过渡，只有 opacity 能淡入淡出，
+ * 进出框才不会有「啪一下出现」的塑料感。
+ * ------------------------------------------------------------ */
+
+/* 灵动岛（顶部状态区正中） */
+#app::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 8px;
+  transform: translateX(-50%);
+  width: 104px;
+  height: 26px;
+  border-radius: 15px;
+  background: radial-gradient(circle at 77% 50%, #3b372f 0 4px, #12100e 5px);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 246, 230, 0.09),
+    0 1px 3px rgba(0, 0, 0, 0.28);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 100;
+  transition: opacity 0.3s var(--ease) 0.16s;
+}
+
+/* Home 指示条（下巴正中）—— 用 --c-ink 压 40% 透明度，浅深两套主题都服帖 */
+#app::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 7px;
+  transform: translateX(-50%);
+  width: 128px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--c-ink);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 100;
+  transition: opacity 0.3s var(--ease) 0.2s;
+}
+
+/* 右侧电源键 —— 朱砂一记，是机身唯一用色的地方（06 §4.1 的强调色只给要点） */
+body::before {
+  content: '';
+  position: absolute;
+  z-index: 2;
+  left: calc(50% + 206px * var(--frame-scale, 1));
+  top: calc(50% - 150px * var(--frame-scale, 1));
+  width: calc(5px * var(--frame-scale, 1));
+  height: calc(70px * var(--frame-scale, 1));
+  border-radius: 0 3px 3px 0;
+  background: linear-gradient(180deg, #c9564a, #8e2a20);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.34s var(--ease) 0.24s;
+}
+
+/* 左侧音量键 */
+body::after {
+  content: '';
+  position: absolute;
+  z-index: 2;
+  right: calc(50% + 206px * var(--frame-scale, 1));
+  top: calc(50% - 222px * var(--frame-scale, 1));
+  width: calc(5px * var(--frame-scale, 1));
+  height: calc(60px * var(--frame-scale, 1));
+  border-radius: 3px 0 0 3px;
+  background: linear-gradient(180deg, #2b2721, #17150f);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.34s var(--ease) 0.24s;
+}
+
+/* ------------------------------------------------------------
+ * 进框：舞台 + 机身
+ * ------------------------------------------------------------ */
+
+html[data-device='phone'],
+html[data-device='phone'] body {
+  background-color: #ded5c2; /* 渐变没盖到的画布边缘，别漏白 */
+}
+
+/* 舞台 = 机身之外的桌面：宣纸底做一圈柔光 + 朱砂晕，让手机「放在桌上」而不是贴在白墙上 */
+html[data-device='phone'] body {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(120% 90% at 50% -15%, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0) 60%),
+    radial-gradient(85% 65% at 50% 118%, rgba(176, 58, 46, 0.1), rgba(176, 58, 46, 0) 70%),
+    linear-gradient(165deg, #f1ebdf 0%, #e7dfd0 52%, #dbd2be 100%);
+}
+
+html[data-theme='dark'][data-device='phone'],
+html[data-theme='dark'][data-device='phone'] body {
+  background-color: #100f0d;
+}
+
+html[data-theme='dark'][data-device='phone'] body {
+  background:
+    radial-gradient(120% 90% at 50% -15%, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0) 60%),
+    radial-gradient(85% 65% at 50% 118%, rgba(201, 86, 74, 0.16), rgba(201, 86, 74, 0) 70%),
+    linear-gradient(165deg, #26221d 0%, #1a1815 55%, #0f0e0c 100%);
+}
+
+/* 机身屏幕：390 × 844 恒定，缩放交给 transform（见文件头第 2 点）。
+   overflow:hidden + border-radius 既是屏幕圆角，也把 fixed 弹层一起裁住。 */
+html[data-device='phone'] #app {
+  position: relative;
+  flex: none;
+  width: 390px;
+  height: 844px;
+  padding-top: 36px;
+  padding-bottom: 16px;
+  background: var(--c-bg);
+  border-radius: 44px;
+  overflow: hidden;
+  z-index: 1;
+  transform: scale(var(--frame-scale, 1));
+  box-shadow:
+    0 0 0 1.5px rgba(252, 245, 231, 0.16),
+    0 0 0 12px #17140f,
+    0 0 0 13.5px rgba(94, 84, 66, 0.5),
+    0 26px 56px -16px rgba(30, 24, 14, 0.45),
+    0 6px 18px rgba(30, 24, 14, 0.2);
+}
+
+/* 深色主题：舞台本身暗，机身改成「更沉的黑 + 弱一点的落影」，避免黑上叠黑看不出轮廓 */
+html[data-theme='dark'][data-device='phone'] #app {
+  box-shadow:
+    0 0 0 1.5px rgba(255, 246, 231, 0.1),
+    0 0 0 12px #0e0d0b,
+    0 0 0 13.5px rgba(150, 138, 112, 0.3),
+    0 26px 60px -16px rgba(0, 0, 0, 0.7);
+}
+
+/* 进 / 出框的动画窗口：stores/deviceFrame.ts 切换时给 <html> 挂 frame-anim，
+   520ms 后摘掉。为什么用「临时类」而不是常驻 transition ——
+   常驻的话窗口拖拽缩放会一直被 0.46s 过渡拖出迟滞；只挂一瞬则进出都顺滑。 */
+html.frame-anim #app {
+  transition:
+    width 0.46s var(--ease),
+    height 0.46s var(--ease),
+    padding 0.46s var(--ease),
+    border-radius 0.46s var(--ease),
+    transform 0.46s var(--ease),
+    box-shadow 0.46s var(--ease),
+    background-color 0.46s var(--ease);
+}
+
+/* ------------------------------------------------------------
+ * 进框：点亮常驻节点 + 视口单位修正
+ * ------------------------------------------------------------ */
+
+html[data-device='phone'] #app::before {
+  opacity: 1;
+}
+
+html[data-device='phone'] #app::after {
+  opacity: 0.4;
+}
+
+html[data-device='phone'] body::before,
+html[data-device='phone'] body::after {
+  opacity: 1;
+}
+
+/* 视口单位在框内指的是「浏览器窗口」不是「机身屏幕」——
+   设置抽屉的 92vw、Toast 的 92vw 在 390px 的机身里会撑出边界，
+   改成相对包含块（fixed 包含块 = #app）的百分比。
+   :not(.card) —— 这条规则只该约束抽屉这类 fixed 浮层面板；
+   内容卡片（.card.panel，如结果页的卦象卡、起卦页的输入卡）必须
+   保持 flex 伸张的 100% 宽，与相邻卡片严格对齐。若把它们也压成
+   92%，卦象卡就会比兄弟块窄一截（手机框预览下卦象块偏窄的根因）。 */
+html[data-device='phone'] #app .panel:not(.card) {
+  width: min(420px, 92%);
+}
+
+html[data-device='phone'] #app .toast-host {
+  max-width: min(92%, 460px);
+}

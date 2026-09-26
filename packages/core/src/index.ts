@@ -2,7 +2,7 @@
  * @plumora/core —— 观梅 · Plumora 起卦核心算法
  *
  * 平台无关纯逻辑（仅依赖 @plumora/knowledge 的数据），无 DOM / Node / 框架依赖。
- * 规则来源：docs/dev/03-起卦核心算法设计.md v1.4，实现逐条对照。
+ * 规则来源：docs/dev/03-起卦核心算法设计.md v2.0，实现逐条对照。
  *
  * 农历转换通过 LunarProvider 端口注入（见 ./lunar.ts），
  * Web 端实现为 @plumora/lunar，Android 端可换 lunar-java。
@@ -39,12 +39,10 @@ export {
   castByTimeParts,
   castByNumber,
   castByCharacter,
-  castBySound,
   castByRandom,
   inputParamsOf,
   castContext,
   CastInputError,
-  SOUND_COUNT_MAX,
 } from './casters.js';
 export type { CharacterCastInput, RandomSource } from './casters.js';
 
@@ -65,6 +63,7 @@ export {
   RELATION_CN,
   DEGREE_CN,
   METHOD_CN,
+  methodCn,
 } from './types.js';
 export type {
   CastMethod,
@@ -72,12 +71,10 @@ export type {
   TimeCast,
   NumberCast,
   CharacterCast,
-  SoundCast,
   RandomCast,
   TimeCastParams,
   NumberCastParams,
   CharacterCastParams,
-  SoundCastParams,
   RandomCastParams,
   InputParams,
   JudgeResult,

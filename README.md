@@ -15,10 +15,10 @@
 
 | 模块 | 内容 |
 | --- | --- |
-| 起卦 | 时间、数字、汉字笔画、声音点数、随机，共五种方式 |
+| 起卦 | 时间、数字、汉字笔画、随机，共四种方式 |
 | 排盘 | 本卦、互卦、变卦、动爻、体卦/用卦、五行生克结论（大吉/小吉/吉/小凶/大凶） |
 | 卦例 | 本地保存、备注、应验标记、列表、关键字搜索、导出 JSON / CSV |
-| 学习 | 起卦方法说明、八卦类象速查、六十四卦速查 |
+| 学习 | 八卦类象速查、六十四卦速查 |
 | 设置 | 笔画标准（简/繁）、默认起卦方式、体用判定流派、主题、保留记录上限 |
 
 全部功能离线可用，数据仅存本机，不发任何网络请求。
@@ -80,7 +80,7 @@ Plumora/
 ├─ apps/
 │  └─ web/                 # Web 应用（Vue 3 + Vite）
 │     └─ public/           # 品牌图标（印章 icon.svg / 纯字标 mark.svg，均为竖排小篆「觀梅」）
-├─ docs/                   # 设计文档（dev/ 为九份主文档，ui/ 为高保真原型）
+├─ docs/                   # 设计文档（dev/ 为九份主文档）
 └─ .workbuddy/checks/      # 文档集自查脚本
 ```
 
@@ -97,7 +97,7 @@ Plumora/
 
 设计与需求文档见 [docs/dev/README.md](docs/dev/README.md)（含阅读顺序与文档清单）；文档的契约范围（哪份是权威、`*.docx` 只是导出快照）见 [docs/README.md](docs/README.md)。
 
-⚠️ 仓根 `package.json` 不设 `"type": "module"`——各 workspace 包自带该字段；仓根若设，会把 `docs/ui/build/*.js` 与 `.workbuddy/checks/*.js` 这些既有 CommonJS 工具链当成 ESM，导致检查脚本无法运行。
+⚠️ 仓根 `package.json` 不设 `"type": "module"`——各 workspace 包自带该字段；仓根若设，会把 `.workbuddy/checks/*.js` 这些既有 CommonJS 工具链当成 ESM，导致检查脚本无法运行。
 
 ## 声明
 

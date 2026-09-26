@@ -5,11 +5,22 @@
  *   < 900px ：顶部标题栏 + 底部 3 Tab + 单列内容
  *   ≥ 900px ：左侧固定导航 + 居中内容区（06 §六 折叠屏/平板/桌面展开态）
  *
+ * 底部 3 Tab 只属于手机形态：桌面形态左侧已有主菜单，两处同时出现是重复入口
+ * （产品口径：电脑模式不显示底部菜单）。隐藏走 CSS（见下方 .tabbar 规则），
+ * 判据仍是 data-layout，不用 JS 判断断点。
+ *
  * 两种形态都渲染在 DOM 中，由 CSS 切换（判据是 `<html data-layout>`，
  * 见下方断点说明），避免 JS 断点判断带来的首屏闪烁与布局抖动。
  *
  * 用户可以在顶栏 / 侧栏一键切换「电脑模式 / 手机模式」（LayoutToggle），
  * 也可以在设置面板里选「自动 / 电脑 / 手机」。
+ *
+ * 宽屏上处于「手机形态」时会自动套上真机框预览（390 × 844 手机壳），
+ * 进出只走顶栏的 DeviceFrameToggle（机身下方不再放第二处退出口），样式见 styles/frame.css。
+ * 弹层一律 Teleport 到 #app：预览态下 #app 就是机身屏幕，遮罩/抽屉才不会溢出机身。
+ *
+ * 顶栏两行（产品反馈）：手机形态的第一行只放品牌标题（居左、独占整行），
+ * 第二行放全部操作钮（右对齐）——两行错开，标题不再被按钮压缩。见 .appbar 样式。
  */
 import { computed, ref } from 'vue';
 import CastView from '@/views/CastView.vue';
@@ -18,13 +29,32 @@ import RecordDetailView from '@/views/RecordDetailView.vue';
 import RecordsView from '@/views/RecordsView.vue';
 import ResultView from '@/views/ResultView.vue';
 import DisclaimerGate from '@/components/DisclaimerGate.vue';
+import DeviceFrameToggle from '@/components/DeviceFrameToggle.vue';
 import LayoutToggle from '@/components/LayoutToggle.vue';
 import NavList from '@/components/NavList.vue';
+import QrCodeDialog from '@/components/QrCodeDialog.vue';
+import QrEntry from '@/components/QrEntry.vue';
 import SettingsPanel from '@/components/SettingsPanel.vue';
 import ToastHost from '@/components/ToastHost.vue';
 import { route } from '@/router';
+import { useDeviceFrame } from '@/stores/deviceFrame';
+import { useQrDialog } from '@/stores/qrDialog';
 
 const settingsOpen = ref(false);
+
+/**
+ * 二维码弹窗：弹窗本体只在这里渲染一份（Teleport 到 #app），
+ * 顶栏 / 侧栏图标与设置面板里的原入口共用 stores/qrDialog 的同一份状态。
+ */
+const { qrOpen, closeQr } = useQrDialog();
+
+/**
+ * 手机框预览（真机框）：宽屏 + 手机形态时自动套框，顶栏框图标可进出。
+ * 解构出顶层 ref 才能在模板里自动解包（store 返回的普通对象不会被解包）。
+ * available 同时用作框图标的 v-if —— 真机窄屏上恒为 false，按钮不渲染。
+ * （framed 只在 DeviceFrameToggle 内部用，外壳不再需要它。）
+ */
+const { available } = useDeviceFrame();
 
 const view = computed(() => {
   switch (route.value.name) {
@@ -60,6 +90,7 @@ const brandMark = './icon.svg';
         <img class="brand-mark" :src="brandMark" alt="" aria-hidden="true" />
         <div class="brand-text">
           <b>观梅</b>
+          <span class="brand-dot" aria-hidden="true">·</span>
           <span>PLUMORA</span>
         </div>
       </div>
@@ -75,6 +106,7 @@ const brandMark = './icon.svg';
           </svg>
           <span>设置</span>
         </button>
+        <QrEntry variant="side" />
         <p class="disclaimer">本应用仅供传统文化学习与研究使用。</p>
       </div>
     </aside>
@@ -85,11 +117,14 @@ const brandMark = './icon.svg';
           <img class="brand-mark" :src="brandMark" alt="" aria-hidden="true" />
           <div class="brand-text">
             <b>观梅</b>
+            <span class="brand-dot" aria-hidden="true">·</span>
             <span>PLUMORA</span>
           </div>
         </div>
         <div class="appbar-ops">
           <LayoutToggle variant="bar" />
+          <DeviceFrameToggle v-if="available" />
+          <QrEntry variant="bar" />
           <button type="button" class="icon-btn" aria-label="设置" @click="settingsOpen = true">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <circle cx="12" cy="12" r="3.2" />
@@ -115,10 +150,20 @@ const brandMark = './icon.svg';
         </div>
       </main>
 
-      <NavList variant="tabs" />
+      <!--
+        底部 3 Tab —— 手机形态专属。桌面形态左侧已有主菜单（产品口径：电脑模式
+        不显示底部菜单），由下方 [data-layout='desk'] .tabbar 规则隐藏；
+        手机框预览不改 data-layout（框内仍是手机形态），所以框内照常显示。
+        隐藏用 CSS 而非 v-if：display:none 同时移出 Tab 序与无障碍树，
+        桌面形态下侧栏是唯一导航入口，且切换形态无需 JS 重算。
+      -->
+      <div class="tabbar">
+        <NavList variant="tabs" />
+      </div>
     </div>
 
     <SettingsPanel :open="settingsOpen" @close="settingsOpen = false" />
+    <QrCodeDialog :open="qrOpen" @close="closeQr" />
     <ToastHost />
     <DisclaimerGate />
   </div>
@@ -197,11 +242,33 @@ const brandMark = './icon.svg';
   min-height: 0;
 }
 
+/* ---------- 移动形态顶栏：两行 ----------
+ *
+ * 顶栏只在手机形态存在（见文末 [data-layout='desk'] .appbar 整块隐藏，
+ * 桌面走左侧栏），所以两行结构直接写在基规则里，不必再挂一层 data-layout；
+ * 手机框预览（data-device='phone'）里跑的就是这套移动形态，效果一并生效。
+ *
+ * 第 1 行：品牌（印章 + 观梅 + PLUMORA 字标）独占整行、居左，
+ *          不再被后面 4 个操作钮挤压 —— 产品反馈「标题行要单独成行」。
+ * 第 2 行：全部操作钮（布局切换 / 手机框 / 扫码 / 设置）整体右对齐，
+ *          沿用单行时代「按钮靠右」的节奏，与标题错开成两行。
+ *          用列向 flex 堆叠而不是 flex-wrap 换行：行的归属由结构写死，
+ *          不依赖各子项 basis 刚好放不下（那样窄屏一变宽就会回流成一行）。
+ *
+ * 行高：第 1 行由 30px 印章 / 22px 标题撑到约 33px；第 2 行是 48px 触控行
+ *      （LayoutToggle 的 min-height: --tap-min，48dp 触控下限），行距 8px ——
+ *      与下方 padding 同为 8，两行读起来是一条顶栏、不是两块各自为政。
+ * 分隔线：淡墨 var(--c-line) 收在整条顶栏底部，与内容区起始间距 = 自身
+ *      padding 8px + 分隔线 1px + .content-inner 6px ≈ 15px。
+ * sticky：顶栏本就在滚动容器（.content / .scroll-area）之外，天然常驻、
+ *      内容在它下面滚；改两行后高度变高但行为不变，无需 position: sticky。 */
 .appbar {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 16px 8px;
+  flex-direction: column;
+  align-items: stretch;
+  row-gap: 8px;
+  padding: 12px 16px 8px;
+  border-bottom: 1px solid var(--c-line);
   flex: none;
 }
 
@@ -240,9 +307,17 @@ const brandMark = './icon.svg';
   letter-spacing: 1px;
 }
 
+/* 顶栏两行后第一行再无对手，拉丁字标 PLUMORA 常驻，不再随窄屏退场。
+ * （此处原先有 @media (max-width:380px) 隐藏 .appbar .brand span 的补丁：
+ *   单行时代标题要跟 4 个操作钮抢地方。现在品牌独占一行，320px 视口下
+ *   第一行可用宽 320-32=288px，品牌整串实测约 155px，恒不折行、不溢出；
+ *   且 .brand / .brand-text 都是 min-width:auto 的 flex item，
+ *   「PLUMORA」是单个词，min-content 即整词宽，也不存在折成两行的可能。） */
+
 .appbar-ops {
   display: flex;
   align-items: center;
+  justify-content: flex-end; /* 第二行整体靠右，与居左的品牌行错开 */
   gap: 8px;
   flex: none;
 }
@@ -283,6 +358,28 @@ const brandMark = './icon.svg';
   max-width: var(--content-max);
   margin: 0 auto;
   padding: 6px 16px 24px;
+}
+
+/* ---------- 底部 3 Tab（手机形态专属） ----------
+ *
+ * 桌面形态隐藏：左侧侧栏已是主菜单，两处同时出现等于重复入口
+ * （产品口径「电脑模式不要下方主菜单」）。三态关系：
+ *   ① data-layout='desk'  → 隐藏（宽屏强制电脑模式也算，判据只看这个属性）
+ *   ② data-layout='mobile' → 显示（真机窄屏 / 宽屏强制手机模式；
+ *                             此时侧栏 display:none，Tab 是唯一导航入口）
+ *   ③ 手机框预览 data-device='phone' 只在「宽屏 + 手机形态」出现，
+ *      且不改 data-layout → 框内仍是手机形态，底部 Tab 照常显示。
+ * 900px 断点只在 platform/settings.ts 被解析成 data-layout，CSS 不写媒体查询
+ * （runtime-smoke 会断言样式表里没有残留的 @media (min-width: 900px)）。
+ * 用 display:none 而非 v-if：元素一并移出 Tab 序与无障碍树，桌面形态下
+ * 侧栏是唯一导航入口；且切形态不需要 JS 重算，首屏无闪烁。
+ */
+.tabbar {
+  flex: none;
+}
+
+[data-layout='desk'] .tabbar {
+  display: none;
 }
 
 /* ---------- 断点：桌面端展开 ----------

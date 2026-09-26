@@ -164,6 +164,81 @@ async function inspectLayoutToggle() {
 }
 
 /**
+ * 断言「手机框预览」：宽屏 + 手机形态 → <html data-device="phone">，
+ * 且框图标能进、能出、退了还能再进（「只进不出」会把用户锁死在机身里）。
+ *
+ * jsdom 的 matchMedia 桩恒为 false（视口视为窄屏），正好卡住进框判据的另一半，
+ * 所以先换成「宽屏」桩，再点两次布局开关（手机 → 电脑 → 手机）把形态定死为「手机」——
+ * available 的重算靠 layoutMode 变更触发，强制值本身不受视口影响。
+ * 末尾把桩还原、并停在未套框状态，别污染后续断言。
+ *
+ * 样式侧同 inspectLayoutToggle：jsdom 无样式表，直接读构建产物确认 data-device 规则存在
+ * （否则属性照变、界面无反应）。须在 inspectSettings 之前调用（面板处于关闭态）。
+ */
+async function inspectDeviceFrame() {
+  const doc = window.document;
+  const html = doc.documentElement;
+
+  const cssPath = path.join(DIST, 'web.css');
+  const raw = fs.existsSync(cssPath) ? fs.readFileSync(cssPath, 'utf8') : '';
+  const css = raw.replace(/\/\*[\s\S]*?\*\//g, '');
+  const hasRule = css.includes("data-device='phone'") || css.includes('data-device="phone"');
+
+  const layoutBtn = () => doc.querySelector('[aria-label^="切换布局"]');
+  const frameBtn = () => doc.querySelector('[aria-label^="手机框预览"]');
+  const deviceOn = () => html.getAttribute('data-device') === 'phone';
+
+  const originMatchMedia = window.matchMedia;
+  window.matchMedia = (q) => ({
+    matches: q.includes('900px'),
+    media: q,
+    addEventListener() {},
+    removeEventListener() {},
+    addListener() {},
+    removeListener() {},
+  });
+
+  const problems = [];
+  if (deviceOn()) problems.push('进框前 data-device 已是 phone（初值不对）');
+
+  // 手机 → 电脑 → 手机：第二次落回手机形态时，宽屏 + 手机形态应自动套框
+  layoutBtn().click();
+  await sleep(160);
+  layoutBtn().click();
+  await sleep(200);
+
+  if (!deviceOn()) problems.push('宽屏切到手机形态后未自动套框');
+  if (!frameBtn()) problems.push('套框后顶栏没有框图标（无法退出）');
+
+  // 退出 → 框图标应仍在（当前是「宽屏 + 手机形态」，可再进）
+  frameBtn() && frameBtn().click();
+  await sleep(160);
+  if (deviceOn()) problems.push('点框图标后未退出机身');
+
+  // 再进 → 抑制标记应被复位（否则退出一次就再也进不去了）
+  if (frameBtn()) {
+    frameBtn().click();
+    await sleep(160);
+    if (!deviceOn()) problems.push('退出后无法再次进入机身');
+    frameBtn().click();
+    await sleep(160);
+    if (deviceOn()) problems.push('第二次退出未生效');
+  } else {
+    problems.push('退出后框图标消失（无法再进）');
+  }
+
+  window.matchMedia = originMatchMedia;
+
+  const ok = problems.length === 0 && hasRule;
+  console.log(
+    `${ok ? '  ok  ' : '  FAIL'} #手机框     data-device ${deviceOn() ? 'phone' : '—'} / ` +
+      `进出往返 ${problems.length ? '异常' : '正常'} / 样式规则 ${hasRule ? '有' : '缺'}` +
+      (problems.length ? `；${problems.join('；')}` : ''),
+  );
+  return ok;
+}
+
+/**
  * 断言「手机扫码打开本页」真的画出了二维码。
  *
  * 断言的是 `<path>` 有内容 + viewBox 合法，而不是「svg 元素存在」——
@@ -422,13 +497,100 @@ function inspectSettingsDrawerA11y() {
   return ok;
 }
 
+/**
+ * 断言起卦页的方式选择器**只剩三项**（时间 / 数字 / 汉字）。
+ *
+ * 声音（点数）起卦下线后，真正的风险不是「按钮少了」，而是有人哪天把它加回来、
+ * 或者删了选项却忘了删面板——那时页面会静默多出一个不可用入口。
+ * 这里同时断言「选项数 = 3」和「页面不含『声音』字样」，两侧都堵住。
+ */
+async function inspectCastMethods() {
+  const doc = window.document;
+  window.location.hash = '#/cast';
+  await sleep(160);
+
+  const group = doc.querySelector('[role="radiogroup"][aria-label="起卦方式"]');
+  const labels = group
+    ? Array.from(group.querySelectorAll('.seg-btn')).map((b) => b.textContent.trim())
+    : [];
+  const text = (doc.querySelector('#app')?.textContent ?? '').replace(/\s+/g, ' ');
+
+  const ok =
+    labels.length === 3 &&
+    labels.join('/') === '时间/数字/汉字' &&
+    !text.includes('声音') &&
+    !text.includes('点数');
+  console.log(
+    `${ok ? '  ok  ' : '  FAIL'} #起卦方式   ${labels.length} 项 [${labels.join(' / ')}] / ` +
+      `页面残留「声音」${text.includes('声音') ? '有' : '无'}`,
+  );
+  return ok;
+}
+
+/**
+ * 断言「数字起卦」真实输入能完成起卦（回归：Vue 3 的 v-model 会把 type="number"
+ * 输入自动转成 number，旧代码 `num1.value.trim()` 会抛 "trim is not a function"，
+ * 表现为「起卦失败：num1.value.trim is not a function」）。
+ *
+ * 走真实交互：切到数字方式 → 填两个数字输入框 → 点起卦 → 应跳到 #/result。
+ */
+async function inspectNumberCast() {
+  const fail = (why) => {
+    console.log(`  FAIL #数字起卦  ${why}`);
+    return false;
+  };
+  const doc = window.document;
+  const setInput = (el, value) => {
+    el.value = value;
+    el.dispatchEvent(new window.Event('input', { bubbles: true }));
+  };
+
+  window.location.hash = '#/cast';
+  await sleep(160);
+
+  const group = doc.querySelector('[role="radiogroup"][aria-label="起卦方式"]');
+  const numberBtn = group
+    ? Array.from(group.querySelectorAll('.seg-btn')).find((b) => b.textContent.trim() === '数字')
+    : null;
+  if (!numberBtn) return fail('起卦页找不到「数字」分段按钮');
+
+  numberBtn.click();
+  await sleep(80);
+
+  const n1 = doc.querySelector('#num-1');
+  const n2 = doc.querySelector('#num-2');
+  if (!n1 || !n2) return fail('数字面板未渲染出两个数字输入框');
+
+  setInput(n1, '3');
+  setInput(n2, '8');
+  await sleep(80);
+
+  const castBtn = Array.from(doc.querySelectorAll('button')).find((b) => b.textContent.includes('起 卦'));
+  if (!castBtn) return fail('找不到「起 卦」主按钮');
+  castBtn.click();
+  await sleep(260);
+
+  const text = (doc.querySelector('#app')?.textContent ?? '').replace(/\s+/g, ' ');
+
+  const ok =
+    window.location.hash.startsWith('#/result') &&
+    !text.includes('起卦失败') &&
+    !text.includes('trim is not a function');
+  console.log(
+    `${ok ? '  ok  ' : '  FAIL'} #数字起卦  ${window.location.hash} / ` +
+      `toast「起卦失败」${text.includes('起卦失败') ? '有' : '无'}`,
+  );
+  return ok;
+}
+
 (async () => {
   await sleep(300);
   const results = [];
 
   results.push(await inspect('#/cast', ['起卦', '丙午年']));
+  results.push(await inspectCastMethods());
   results.push(
-    await inspect('#/result', ['水风井', '水天需', '火泽睽', '体生用', '小凶', '体坎', '用巽']),
+    await inspect('#/result', ['水风井', '水天需', '火泽睽', '体生用', '小凶', '体卦 坎（水）', '用卦 巽（木）']),
   );
   // 用路由**特有**文案断言（审查 I-7）：原先写 '卦例'，而「卦例」是 NavList 的常驻 Tab 文案，
   // 应用壳渲染即通过，与 RecordsView 是否正常毫无关系。
@@ -447,6 +609,9 @@ function inspectSettingsDrawerA11y() {
   // 设置抽屉关闭态可达性（W-7）——须在打开设置面板之前
   results.push(inspectSettingsDrawerA11y());
 
+  // 手机框预览（宽屏 + 手机形态自动套框 / 框图标进出）——同样须在面板打开之前
+  results.push(await inspectDeviceFrame());
+
   // 版本接线端到端：设置面板「关于」区显示的版本号必须与真源一致
   const expectVersion = JSON.parse(fs.readFileSync(VERSION_JSON, 'utf8')).version;
   results.push(await inspectSettings(expectVersion));
@@ -456,6 +621,10 @@ function inspectSettingsDrawerA11y() {
 
   // 图标接线（须在设置面板打开后执行）
   results.push(inspectBrandIcons());
+
+  // 数字起卦端到端（回归：v-model 对 type="number" 自动转 number，旧代码 .trim() 会炸）。
+  // 放在最后：它会把当前排盘换成数字起卦结果，不能覆盖前面依赖金标准 A 的断言。
+  results.push(await inspectNumberCast());
 
   console.log('\n运行时错误 :', errors.length ? errors : '无');
   const ok = results.every(Boolean) && errors.length === 0;
