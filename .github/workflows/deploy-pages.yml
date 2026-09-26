@@ -3,8 +3,9 @@ name: Deploy to GitHub Pages
 # 把 Web 端发布到 GitHub Pages（纯静态产物，见 docs/dev/08 §4.1）。
 #
 # 触发：push main 自动发布；也可以手动触发（Actions 页 Run workflow）。
-# 首次启用：仓库 Settings → Pages → Build and deployment → Source 选「GitHub Actions」，
-#   站点地址为 https://<用户名>.github.io/Plumora/（仓库必须公开）。
+# Pages 由本工作流**自动启用**（configure-pages enablement: true，Source = GitHub Actions），
+#   无需在 Settings 手动配置；唯一前提是仓库为公开（GitHub Free 账户私有仓库不支持 Pages）。
+#   站点地址为 https://<用户名>.github.io/Plumora/。
 #
 # 为什么不把产物提交进仓库：dist/ 已被 .gitignore 忽略，构建产物由本工作流
 #   在 CI 里现做现传（upload-pages-artifact），保持仓库干净。
@@ -42,6 +43,9 @@ jobs:
 
       - uses: actions/configure-pages@v5
         id: pages
+        with:
+          # 自动启用 Pages（Source = GitHub Actions），仓库公开即可，无需手动进 Settings
+          enablement: true
 
       - name: 安装依赖（严格按 lockfile）
         run: npm ci

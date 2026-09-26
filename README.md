@@ -53,13 +53,12 @@ npm run verify       # 版本一致性 + 类型检查 + 全量单测 + 运行时
 
 Web 端为纯静态产物，可直接部署到 GitHub Pages。仓库已内置自动发布工作流 [`.github/workflows/deploy-pages.yml`](.github/workflows/deploy-pages.yml)：推送到 `main`（或手动触发 workflow）即自动构建并上线，无需把构建产物提交进仓库。
 
-首次启用只需在仓库 **Settings → Pages → Build and deployment** 把 **Source** 选为 **GitHub Actions**，保存后等待 1–5 分钟，即可通过以下地址访问：
+Pages 由工作流**自动启用**，无需在 Settings 里手动配置；唯一前提是仓库为**公开**（GitHub Free 账户的私有仓库不支持 Pages）。首次推送后等待 1–5 分钟，即可通过以下地址访问：
 
 ```
 https://<用户名>.github.io/Plumora/
 ```
 
-> - 前提：仓库必须为**公开**（GitHub Free 账户的私有仓库不支持 Pages）。
 > - 站点地址中的仓库名按实际大小写；应用为 hash 路由 + 相对路径资源，子路径部署无需任何额外配置，页面本身仍保持离线可用、不发网络请求。
 
 ## 版本管理
