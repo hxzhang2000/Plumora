@@ -1,11 +1,5 @@
-feat(knowledge): v0.4.0 卦辞爻辞三传十翼全文入库 + 聚合展示UI
+chore(release): v0.5.0 接入 GitHub Pages 自动发布
 
-- 450条卦辞爻辞入库（64卦辞+384爻辞+2用九用六）
-- 三传入库（彖64+大象64+小象252+文言2）
-- 十翼数据解析入库（5章，shiYi.generated.ts 65.8KB）
-- 卦级原文聚合展示面板（GuaciYaoCiPanel.vue）
-- 十翼原文展示UI（ShiYiPanel.vue，单页滚动）
-- 六十四卦页面接入实际原文数据
-- 桌面布局修复（desk模式max-width放宽）
-- 移除手机框预览按钮
-- 09文档升v2.3，十翼设计文档v0.2
+- 新增 .github/workflows/deploy-pages.yml：push main / 手动触发自动构建并上线（产物 apps/web/dist → Pages）
+- README 新增「在线访问（GitHub Pages）」章节，目录结构补 .github/workflows/
+- 08 文档 §4.1 补 GitHub Pages 落地步骤（v1.5 → v1.6），docs/dev/README 镜像 v1.22

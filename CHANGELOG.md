@@ -8,6 +8,16 @@
 
 ---
 
+## [Unreleased]
+
+## [0.5.0] - 2026-09-26
+
+### 变更
+
+- ① 新增 GitHub Pages 自动发布：`.github/workflows/deploy-pages.yml`（push main / workflow_dispatch 触发，`npm ci` + `npm run build` → `actions/configure-pages` + `upload-pages-artifact` + `deploy-pages`，产物 `apps/web/dist` 纯静态；hash 路由 + 相对 base 兼容子路径部署，无需服务端 rewrite；仓库 Settings → Pages 的 Source 选「GitHub Actions」即启用）
+- ② README 新增「在线访问（GitHub Pages）」章节（启用步骤 + 站点地址格式 + 公开仓库前提），目录结构补 `.github/workflows/`
+- ③ 08 文档 §4.1 发布流程补 GitHub Pages 落地步骤，文档版本 v1.5 → v1.6
+
 ## [0.4.0] - 2026-09-26
 
 ### 变更

@@ -1,0 +1,67 @@
+name: Deploy to GitHub Pages
+
+# 把 Web 端发布到 GitHub Pages（纯静态产物，见 docs/dev/08 §4.1）。
+#
+# 触发：push main 自动发布；也可以手动触发（Actions 页 Run workflow）。
+# 首次启用：仓库 Settings → Pages → Build and deployment → Source 选「GitHub Actions」，
+#   站点地址为 https://<用户名>.github.io/Plumora/（仓库必须公开）。
+#
+# 为什么不把产物提交进仓库：dist/ 已被 .gitignore 忽略，构建产物由本工作流
+#   在 CI 里现做现传（upload-pages-artifact），保持仓库干净。
+#
+# action 版本对齐 GitHub 官方 starter-workflows 当前模板（checkout/setup-node @v4、
+#   configure-pages @v5、upload-pages-artifact @v3、deploy-pages @v5），
+#   与 ci.yml 的 checkout / setup-node 版本保持一致。
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同一时间只保留一个进行中的 Pages 发布
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Node 版本取自 .nvmrc（与 ci.yml 同口径）
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - uses: actions/configure-pages@v5
+        id: pages
+
+      - name: 安装依赖（严格按 lockfile）
+        run: npm ci
+
+      # 生产构建：产物 apps/web/dist（纯静态）。hash 路由 + 相对 base（'./'），
+      # 子路径 /<仓库名>/ 部署无需任何额外配置。
+      - name: 生产构建
+        run: npm run build
+
+      - name: 上传构建产物
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: apps/web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

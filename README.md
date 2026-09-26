@@ -49,11 +49,22 @@ npm run build        # 生产构建（产物 apps/web/dist，纯静态）
 npm run verify       # 版本一致性 + 类型检查 + 全量单测 + 运行时冒烟 + 生产构建（提交前必跑）
 ```
 
+## 在线访问（GitHub Pages）
+
+Web 端为纯静态产物，可直接部署到 GitHub Pages。仓库已内置自动发布工作流 [`.github/workflows/deploy-pages.yml`](.github/workflows/deploy-pages.yml)：推送到 `main`（或手动触发 workflow）即自动构建并上线，无需把构建产物提交进仓库。
+
+首次启用只需在仓库 **Settings → Pages → Build and deployment** 把 **Source** 选为 **GitHub Actions**，保存后等待 1–5 分钟，即可通过以下地址访问：
+
+```
+https://<用户名>.github.io/Plumora/
+```
+
+> - 前提：仓库必须为**公开**（GitHub Free 账户的私有仓库不支持 Pages）。
+> - 站点地址中的仓库名按实际大小写；应用为 hash 路由 + 相对路径资源，子路径部署无需任何额外配置，页面本身仍保持离线可用、不发网络请求。
+
 ## 版本管理
 
-Web 端与 Android 端**共用同一版本号**，真源为仓根 [`version.json`](version.json)。
-
-```bash
+Web 端与 Android 端**共用同一版本号**，真源为仓根 [`version.json`](version.json)。```bash
 npm run version:show         # 查看当前版本与全部派生目标状态
 npm run version:bump:patch   # 升版本（自动同步 + 插入 CHANGELOG 条目）
 npm run version:check        # 校验派生目标是否与真源一致（已接入 npm run verify）
@@ -71,6 +82,7 @@ Plumora/
 ├─ start.ps1               # 一键启动的实际逻辑（UTF-8 with BOM）
 ├─ version.json            # 版本号单一真源（Web + Android 共用）
 ├─ CHANGELOG.md            # 产品版本变更记录
+├─ .github/workflows/      # CI 门禁（ci.yml）+ GitHub Pages 自动发布（deploy-pages.yml）
 ├─ package.json            # npm workspaces 根（packages/*、apps/*）
 ├─ tsconfig.base.json      # 全仓 TS 基线
 ├─ scripts/version.mjs     # 版本号同步 / 校验 / 升版本脚本

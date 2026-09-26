@@ -1,6 +1,6 @@
 {
   "name": "@plumora/lunar",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
   "description": "观梅 · Plumora 农历转换适配层 —— 实现 @plumora/core 的 LunarProvider 端口",

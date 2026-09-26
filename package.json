@@ -1,6 +1,6 @@
 {
   "name": "plumora",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "description": "观梅 · Plumora — 梅花易数起卦排盘工具（Web + Android 双端，当前实现 Web 端）",
   "workspaces": [
