@@ -11,6 +11,7 @@
  * ============================================================ */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { SHARE_PARAM } from '@/platform/shareLink';
 
 /* ---------- 宿主桩：location / history / window / document ---------- */
 
@@ -135,6 +136,48 @@ describe('router：路径解析', () => {
     expect(currentHash).toBe('#/cast?x=1');
   });
 
+  /* 分享链接 `#/result?c=…`（platform/shareLink）：参数要被解析进 params，
+   * 但 path 仍是 /result —— normalizeHash 只比 path 段，否则这么长的地址
+   * 会被当成未知路径改写掉，点开分享链接就等于没点。 */
+  it('结果页的分享参数进 params，地址保持原样不被改写', async () => {
+    const { route } = await loadRouter('#/result?c=QUJD');
+    expect(route.value.name).toBe('result');
+    expect(route.value.path).toBe('/result');
+    expect(route.value.params[SHARE_PARAM]).toBe('QUJD');
+    expect(currentHash).toBe('#/result?c=QUJD');
+  });
+
+  it('结果页不带参数时 params 为空（老地址不变）', async () => {
+    const { route } = await loadRouter('#/result');
+    expect(route.value.name).toBe('result');
+    expect(route.value.params[SHARE_PARAM]).toBeUndefined();
+  });
+
+  it('分享参数里的百分号转义会被解回来（截断的 % 也不崩）', async () => {
+    const { route } = await loadRouter('#/result?c=a%2Bb%3D');
+    expect(route.value.params[SHARE_PARAM]).toBe('a+b=');
+
+    const bad = await loadRouter('#/result?c=%E4%B8');
+    expect(bad.route.value.name).toBe('result'); // 关键：解析不抛错
+  });
+
+  /* 学习页的 tab 定位参数 `#/learn?tab=shiYI`：从十翼阅读器返回时该落回
+   * 「十翼」板块而不是默认板块。与结果页分享参数同一套路 —— 进 params、
+   * path 仍是 /learn，地址不被 normalizeHash 改写。 */
+  it('学习页的 tab 参数进 params，地址保持原样不被改写', async () => {
+    const { route } = await loadRouter('#/learn?tab=shiYI');
+    expect(route.value.name).toBe('learn');
+    expect(route.value.path).toBe('/learn');
+    expect(route.value.params.tab).toBe('shiYI');
+    expect(currentHash).toBe('#/learn?tab=shiYI');
+  });
+
+  it('学习页不带 tab 时 params 为空（学习页走自己的默认板块）', async () => {
+    const { route } = await loadRouter('#/learn');
+    expect(route.value.name).toBe('learn');
+    expect(route.value.params.tab).toBeUndefined();
+  });
+
   it('hashchange 到未知路径时同样纠正地址', async () => {
     const { route } = await loadRouter('#/cast');
     locationStub.hash = '#/nope';
@@ -184,6 +227,14 @@ describe('router：goBack（W-14）', () => {
     goBack('/records');
     expect(route.value.name).toBe('records');
     expect(backCount).toBe(0); // 关键：没有调用 history.back()
+  });
+
+  it('十翼阅读页的「返回」带上 tab=shiYI，落回十翼板块而非默认板块', async () => {
+    const { route, goBack } = await loadRouter('#/shi-yi/xi-ci-upper');
+    goBack();
+    expect(route.value.name).toBe('learn');
+    expect(route.value.params.tab).toBe('shiYI');
+    expect(currentHash).toBe('#/learn?tab=shiYI');
   });
 
   it('Tab 页无层级关系：能回上一页就回，否则落到 fallback', async () => {

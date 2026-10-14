@@ -27,6 +27,7 @@ import {
   type NumberCast,
   type RandomCast,
   type TimeCast,
+  type TimePrecision,
 } from './types.js';
 
 /** 起卦输入非法（03 文档 §6.3 等边界裁定） */
@@ -46,7 +47,10 @@ export class CastInputError extends Error {
  *
  * 上卦 = (年支序数 + 农历月 + 农历日) mod 8，余 0 取 8
  * 下卦 = (年支序数 + 农历月 + 农历日 + 时辰序数) mod 8，余 0 取 8
- * 动爻 = 同上之和 mod 6，余 0 取 6
+ * 动爻 = (上式之和 + 细项) mod 6，余 0 取 6
+ *
+ * 细项（03 文档 §6.6）：precision 为 MINUTE 时取分钟数、SECOND 时取分钟 + 秒数、
+ * SHICHEN（缺省）时为 0。**细项只作用于动爻**，上 / 下卦不受影响。
  *
  * 入参一律要求**整数**：非整数若被静默接受，`params` 会记录 15.5 这类脏值，
  * 而 `modTrigram` 内部 `Math.trunc` 却按 15 计算 —— 展示的中间量与真实结果不符。
@@ -56,7 +60,16 @@ export function castByTimeParts(
   lunarMonth: number,
   lunarDay: number,
   hourNo: number,
-  opts: { shifted?: boolean; label?: string } = {},
+  opts: {
+    shifted?: boolean;
+    label?: string;
+    /** 时间精度口径；缺省 SHICHEN（传统时辰，合 03 文档 §2.1 原公式） */
+    precision?: TimePrecision;
+    /** 起卦时刻分钟 0–59；手动输入时间为 0 */
+    minute?: number;
+    /** 起卦时刻秒钟 0–59；手动输入时间为 0 */
+    second?: number;
+  } = {},
 ): TimeCast {
   if (!Number.isInteger(hourNo) || hourNo < 1 || hourNo > 12) {
     throw new CastInputError(`时辰序数须为 1–12 的整数，实际 ${hourNo}`);
@@ -70,23 +83,63 @@ export function castByTimeParts(
   if (!Number.isInteger(lunarDay) || lunarDay < 1 || lunarDay > 30) {
     throw new CastInputError(`农历日须为 1–30 的整数，实际 ${lunarDay}`);
   }
+  const precision = opts.precision ?? 'SHICHEN';
+  const minute = opts.minute ?? 0;
+  const second = opts.second ?? 0;
+  if (!Number.isInteger(minute) || minute < 0 || minute > 59) {
+    throw new CastInputError(`分钟须为 0–59 的整数，实际 ${minute}`);
+  }
+  if (!Number.isInteger(second) || second < 0 || second > 59) {
+    throw new CastInputError(`秒钟须为 0–59 的整数，实际 ${second}`);
+  }
   const s1 = yearBranchNo + lunarMonth + lunarDay;
   const s2 = s1 + hourNo;
+  const movingSum = s2 + fineOfTime(precision, minute, second);
   return {
     method: 'TIME',
     upper: modTrigram(s1),
     lower: modTrigram(s2),
-    moving: modMoving(s2),
+    moving: modMoving(movingSum),
     label: opts.label ?? '',
-    params: { yearBranchNo, lunarMonth, lunarDay, hourNo, s1, s2, shifted: opts.shifted ?? false },
+    params: {
+      yearBranchNo,
+      lunarMonth,
+      lunarDay,
+      hourNo,
+      s1,
+      s2,
+      shifted: opts.shifted ?? false,
+      precision,
+      minute,
+      second,
+      movingSum,
+    },
   };
+}
+
+/**
+ * 动爻细项：在 S2 之外追加参与 mod 6 的时间量（03 文档 §6.6）。
+ * SHICHEN → 0（纯传统时辰口径）；MINUTE → 分钟；SECOND → 分钟 + 秒。
+ */
+function fineOfTime(precision: TimePrecision, minute: number, second: number): number {
+  if (precision === 'SECOND') return minute + second;
+  if (precision === 'MINUTE') return minute;
+  return 0;
 }
 
 /**
  * 时间起卦（日历入口）。
  * 晚子时（23:00 后）按**次日**日数与子时起卦（03 文档 §6.2）。
+ *
+ * @param opts.precision 时间精度口径（03 §6.6）；缺省 SHICHEN 即纯传统时辰口径。
+ *   分钟 / 秒取 `date` 的本地时分秒——「用当前时刻」入口因此可在同一时辰内
+ *   得到不同动爻；手动输入时间（只填到时）分秒恒为 0，与传统口径等价。
  */
-export function castByTime(date: Date, lunar: LunarProvider): TimeCast {
+export function castByTime(
+  date: Date,
+  lunar: LunarProvider,
+  opts: { precision?: TimePrecision } = {},
+): TimeCast {
   const hour = date.getHours();
   let y = date.getFullYear();
   let m = date.getMonth() + 1;
@@ -118,6 +171,9 @@ export function castByTime(date: Date, lunar: LunarProvider): TimeCast {
 
   return castByTimeParts(yearBranchNo, lunarMonth, lu.lDay, hourNo, {
     shifted,
+    precision: opts.precision ?? 'SHICHEN',
+    minute: date.getMinutes(),
+    second: date.getSeconds(),
     // 干支年**必须与 yearBranchNo 同源**（均由 lYear 派生）。
     // 若此处改用 lu.gzYear（立春为界的干支年），每年「正月初一 → 立春」约 13 天里
     // 标签与算法会互相矛盾：界面写「丙午年」而实际按巳=6 计算，用户手算必然对不上。
@@ -251,6 +307,28 @@ export function castByRandom(random: RandomSource = defaultRandom): RandomCast {
   };
 }
 
+/**
+ * 每日一卦：以「年月日」为种子的确定性起卦，同一天结果稳定、隔天更新。
+ * 用 FNV-1a 哈希日期串做种子，喂给 mulberry32 得到一个可复现的随机源，
+ * 再复用 castByRandom 的取卦逻辑——保证和「随机起卦」共用同一套取值契约。
+ */
+export function castByDaily(date: Date = new Date()): RandomCast {
+  const seedStr = `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < seedStr.length; i++) {
+    h ^= seedStr.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  let state = h >>> 0;
+  const seeded: RandomSource = () => {
+    state = (state + 0x6d2b79f5) | 0;
+    let t = Math.imul(state ^ (state >>> 15), 1 | state);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  return castByRandom(seeded);
+}
+
 /* ------------------------------------------------------------------
  * 派生：inputParams（04 文档 §2.4）与结果页「起卦上下文」文案
  * ------------------------------------------------------------------ */
@@ -268,6 +346,12 @@ export function inputParamsOf(cast: CastResult): InputParams {
         // 落库晚子时标记：否则「23:30 起卦」与「次日 00:30 起卦」的 inputParams
         // 完全同形，详情页无法复盘「按次日计」（C-8）
         shifted: cast.params.shifted,
+        // 时间精度与细项一并落库：否则「同一时辰两次起卦」的 inputParams 同形，
+        // 详情页无法复盘动爻为何不同（03 §6.6 复现性要求）
+        precision: cast.params.precision,
+        minute: cast.params.minute,
+        second: cast.params.second,
+        movingSum: cast.params.movingSum,
       };
     case 'NUMBER':
       return cast.params.mode === 'TWO'
@@ -311,6 +395,16 @@ export function castContext(cast: CastResult): string {
     case 'TIME':
       parts.push(cast.label);
       if (cast.params.shifted) parts.push('晚子时 · 按次日计');
+      // 细项确实改变了取余之和才展示：手动输入时间（分秒为 0）与传统时辰口径
+      // 完全等价，展示「分钟 0」只会是无意义噪声；「用当前时刻」则在细项生效时
+      // 让用户看到动爻究竟由哪个分 / 秒推来（03 §6.6 复现性）
+      if (cast.params.movingSum !== cast.params.s2) {
+        parts.push(
+          cast.params.precision === 'SECOND'
+            ? `分 ${cast.params.minute} 秒 ${cast.params.second}`
+            : `分钟 ${cast.params.minute}`,
+        );
+      }
       break;
     case 'NUMBER':
       if (cast.params.mode === 'TWO') {

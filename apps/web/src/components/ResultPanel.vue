@@ -9,11 +9,12 @@
  * 信息架构（产品负责人 2026-09-26 意见 4）：**切换器下方的全部内容都装在同一个
  * tabpanel 里**，随 `:key="tab"` 整体重挂载——不存在「切了 tab 下面纹丝不动」的固定区块。
  * 三卦各配一套下方卡片（体用是本卦专属概念，互 / 变视图既不标注、也不给提示）：
- *   本卦 → 生克结论卡（体用五行生克）+ 解卦参考 + 体用类象 + 卦辞·爻辞（M1 待录入）
- *   互卦 → 体用生克结论卡 + 互卦构成（二至四爻 / 三至五爻来路）+ 上下卦类象 + 错卦·综卦
- *   变卦 → 体用生克结论卡 + 动爻与变爻 + 上下卦类象 + 错卦·综卦
- * （解卦卡位置为 2026-10-13 用户要求：在卦象与生克结论卡之后、体用类象之前，
- *   仅本卦视图展示——解卦基于本卦体用整体断事，互 / 变视图保持纯事实口径。）
+ *   本卦 → 生克结论卡（体用五行生克）+ 解卦参考 + 一键分享卡 + 体用类象 + 卦辞·爻辞
+ *   互卦 → 生克结论卡 + 解卦参考 + 互卦构成（二至四爻 / 三至五爻来路）+ 上下卦类象 + 错卦·综卦
+ *   变卦 → 生克结论卡 + 解卦参考 + 动爻与变爻 + 上下卦类象 + 错卦·综卦
+ * （解卦卡位置为 2026-10-13 用户要求：在卦象与生克结论卡之后、类象之前；
+ *   2026-10-14 起由「仅本卦」放宽为三卦视图均展示——用户要求三卦切换都给断语参考。
+ *   引擎本身已含本·互·变三审叙述，故三视图所见为同一段整体断语。）
  * 互 / 变视图自 2026-10-13 起也展示体用生克结论（体卦固定为本卦之体，用卦取互 / 变中
  * 与原用侧同位之卦）；其余内容仍只写**由爻画可直接推出的事实**（取爻来路、上下卦、
  * 爻画异同、错综结构），不写额外吉凶断语（01 文档 §五 合规口径）。
@@ -26,15 +27,19 @@
  */
 import { computed, ref, watch } from 'vue';
 import { RELATION_CN, huLines, type ResolvedHexagram } from '@plumora/core';
-import { TRIGRAMS, getHexagramByLines, type Hexagram } from '@plumora/knowledge';
+import { TRIGRAMS, getHexagramByLines, type Hexagram, type TrigramNumber } from '@plumora/knowledge';
 import DegreeBadge from '@/components/DegreeBadge.vue';
 import HexagramStage from '@/components/HexagramStage.vue';
 import GuaciYaoCiPanel from '@/components/GuaciYaoCiPanel.vue';
 import InterpretationCard from '@/components/InterpretationCard.vue';
+import HexagramChart from '@/components/HexagramChart.vue';
+import ShareCard from '@/components/ShareCard.vue';
+import { hexagramEn, hexagramPinyin, trigramPinyin } from '@/platform/bilingual';
+import { useSettings } from '@/stores/settings';
 
 type TabKey = 'ben' | 'hu' | 'bian';
 type HalfMark = { kind: 'ti' | 'yong'; text: string };
-type TabItem = { key: TabKey; cap: string; name: string; sub: string };
+type TabItem = { key: TabKey; cap: string; name: string; py: string; sub: string };
 
 const TAB_KEYS: readonly TabKey[] = ['ben', 'hu', 'bian'];
 
@@ -54,6 +59,16 @@ const props = withDefaults(
 
 const r = computed(() => props.resolved);
 
+const settings = useSettings();
+/** 双语显示开关（设置项，缺省关） */
+const bil = computed(() => settings.showBilingual);
+
+/** 八卦名，双语开启时附带拼音：乾 qián */
+function tgNamePy(n: TrigramNumber): string {
+  const base = TRIGRAMS[n].name;
+  return bil.value ? `${base} ${trigramPinyin(n)}` : base;
+}
+
 /** 当前选中的卦；换新卦（resolved 变化）时回到本卦 */
 const tab = ref<TabKey>('ben');
 watch(
@@ -61,6 +76,14 @@ watch(
   () => {
     tab.value = 'ben';
   },
+);
+
+/** 底部六十四卦全图高亮跟随当前查看的卦（本 / 互 / 变） */
+const chartUpper = computed(() =>
+  tab.value === 'hu' ? r.value.hu.upper : tab.value === 'bian' ? r.value.bian.upper : r.value.ben.upper,
+);
+const chartLower = computed(() =>
+  tab.value === 'hu' ? r.value.hu.lower : tab.value === 'bian' ? r.value.bian.lower : r.value.ben.lower,
 );
 
 /** 互卦六爻（自下而上） */
@@ -111,34 +134,35 @@ const tabs = computed<TabItem[]>(() => [
     key: 'ben',
     cap: '本 卦',
     name: r.value.ben.name,
-    sub: `${TRIGRAMS[r.value.ben.upper].name}上${TRIGRAMS[r.value.ben.lower].name}下`,
+    py: hexagramPinyin(r.value.ben.name),
+    sub: `${tgNamePy(r.value.ben.upper)}上${tgNamePy(r.value.ben.lower)}下`,
   },
   {
     key: 'hu',
     cap: '互 卦',
     name: r.value.hu.name,
-    sub: `${TRIGRAMS[r.value.hu.upper].name}上${TRIGRAMS[r.value.hu.lower].name}下`,
+    py: hexagramPinyin(r.value.hu.name),
+    sub: `${tgNamePy(r.value.hu.upper)}上${tgNamePy(r.value.hu.lower)}下`,
   },
   {
     key: 'bian',
     cap: '变 卦',
     name: r.value.bian.name,
-    sub: `${TRIGRAMS[r.value.bian.upper].name}上${TRIGRAMS[r.value.bian.lower].name}下`,
+    py: hexagramPinyin(r.value.bian.name),
+    sub: `${tgNamePy(r.value.bian.upper)}上${tgNamePy(r.value.bian.lower)}下`,
   },
 ]);
 
 /** 下方详情面板展示的当前卦 */
 const panel = computed(() => {
-  const base = {
-    name: r.value.ben.name,
-    keywords: r.value.ben.keywords,
-  };
   if (tab.value === 'hu') {
+    const name = r.value.hu.name;
     return {
-      ...base,
       cap: '互 卦',
-      name: r.value.hu.name,
-      meta: `${TRIGRAMS[r.value.hu.upper].name}上${TRIGRAMS[r.value.hu.lower].name}下 · 取自本卦二至五爻`,
+      name,
+      py: hexagramPinyin(name),
+      en: hexagramEn(name),
+      meta: `${tgNamePy(r.value.hu.upper)}上${tgNamePy(r.value.hu.lower)}下 · 取自本卦二至五爻`,
       lines: huLinesValue.value,
       moving: 0,
       role: '互卦',
@@ -148,11 +172,13 @@ const panel = computed(() => {
     };
   }
   if (tab.value === 'bian') {
+    const name = r.value.bian.name;
     return {
-      ...base,
       cap: '变 卦',
-      name: r.value.bian.name,
-      meta: `${TRIGRAMS[r.value.bian.upper].name}上${TRIGRAMS[r.value.bian.lower].name}下 · 本卦动爻变动所得`,
+      name,
+      py: hexagramPinyin(name),
+      en: hexagramEn(name),
+      meta: `${tgNamePy(r.value.bian.upper)}上${tgNamePy(r.value.bian.lower)}下 · 本卦动爻变动所得`,
       lines: r.value.changedLines,
       moving: 0,
       role: '变卦',
@@ -161,10 +187,13 @@ const panel = computed(() => {
       keywords: r.value.bian.keywords,
     };
   }
+  const name = r.value.ben.name;
   return {
-    ...base,
     cap: '本 卦',
-    meta: `${TRIGRAMS[r.value.ben.upper].name}上${TRIGRAMS[r.value.ben.lower].name}下 · 动爻 ${r.value.movingLineName}`,
+    name,
+    py: hexagramPinyin(name),
+    en: hexagramEn(name),
+    meta: `${tgNamePy(r.value.ben.upper)}上${tgNamePy(r.value.ben.lower)}下 · 动爻 ${r.value.movingLineName}`,
     lines: r.value.lines,
     moving: r.value.moving,
     role: '本卦',
@@ -281,8 +310,11 @@ const bianFacts = computed(() => {
   };
 });
 
-/** 卦辞 / 爻辞 / 传注 数据到位性：Q2「数据到位同 PR 删占位卡」的判据。
- *  六字段任一非空即视为「数据到位」——占位卡消失、聚合面板接管。 */
+/** 卦辞 / 爻辞 / 传注 数据到位性：判据是「六字段任一非空」——占位卡消失、聚合面板接管。
+ *
+ *  数据侧现状（2026-10-14 核对 knowledge/hexagrams.ts 的 RAW_TEXT）：64 卦的卦辞与
+ *  六爻爻辞**全部录入完毕**，六字段均为空的情况已不存在。这里的分支保留为**防御性兜底**：
+ *  将来若某卦文本被回退/抽换，页面降级成一句说明，而不是渲染一片空白。 */
 const hasGuaciData = computed(() => {
   const h = r.value.ben;
   return !!(
@@ -302,7 +334,7 @@ const cuoZong = computed(() => {
   const self = tab.value === 'hu' ? r0.hu : r0.bian;
   const cuo = getHexagramByLines(lines.map((l) => 1 - l));
   const zong = getHexagramByLines([...lines].reverse());
-  const sub = (h: Hexagram): string => `${TRIGRAMS[h.upper].name}上${TRIGRAMS[h.lower].name}下`;
+  const sub = (h: Hexagram): string => `${tgNamePy(h.upper)}上${tgNamePy(h.lower)}下`;
   return {
     cuoName: cuo.name,
     cuoSub: sub(cuo),
@@ -344,6 +376,7 @@ const halfRows = computed(() => {
       >
         <span class="tab-cap">{{ t.cap }}</span>
         <b class="tab-name serif">{{ t.name }}</b>
+        <span v-if="t.py" class="tab-py">{{ t.py }}</span>
         <span class="tab-sub">{{ t.sub }}</span>
       </button>
     </div>
@@ -364,6 +397,8 @@ const halfRows = computed(() => {
         <div class="p-head">
           <span class="p-cap">{{ panel.cap }}</span>
           <b class="p-name serif">{{ panel.name }}</b>
+          <span v-if="panel.py" class="p-py">{{ panel.py }}</span>
+          <span v-if="panel.en" class="p-en">{{ panel.en }}</span>
           <span class="p-meta">{{ panel.meta }}</span>
         </div>
 
@@ -398,14 +433,19 @@ const halfRows = computed(() => {
 
         <!-- 解卦参考：结合卦象与所问之事（问题改动实时重算）。
              位置（2026-10-13 用户要求）：卦象与生克结论卡之后、体用类象之前。 -->
-        <InterpretationCard :resolved="r" :question="question" />
+        <InterpretationCard :resolved="r" :question="question" view="ben" />
+
+        <!-- 一键分享卡片（canvas 生成 PNG）。
+             三卦视图都可生成：卡片画的是**整盘**（本卦卦象 + 整体断语 + 起卦信息），
+             与当前 tab 无关，所以互 / 变视图下不必先切回本卦。 -->
+        <ShareCard :resolved="r" :question="question" :context="context" />
 
         <!-- 体用类象：体 / 用是本卦专属概念，只在本卦视图出现 -->
         <section class="card">
           <h3 class="card-title">体用类象</h3>
           <div v-for="row in xxRows" :key="row.role" class="xx-row">
             <b class="tag" :class="row.role">
-              {{ row.label }} {{ row.trigram.name }} · {{ elementCn(row.trigram.element) }}
+              {{ row.label }} {{ row.trigram.name }}<span v-if="bil" class="bil-py"> {{ trigramPinyin(row.trigram.number) }}</span> · {{ elementCn(row.trigram.element) }}
             </b>
             <ul>
               <li v-for="c in XX_CATEGORIES" :key="c.key">
@@ -415,7 +455,7 @@ const halfRows = computed(() => {
           </div>
         </section>
 
-        <!-- 卦辞 / 爻辞：数据到位时用聚合面板（GuaciYaoCiPanel），否则保留占位卡（Q2） -->
+        <!-- 卦辞 / 爻辞：正常情况下走聚合面板（GuaciYaoCiPanel）；占位卡是数据缺失时的兜底 -->
         <GuaciYaoCiPanel
           v-if="hasGuaciData"
           :hexagram="r.ben"
@@ -443,6 +483,15 @@ const halfRows = computed(() => {
           </p>
         </section>
 
+        <!-- 解卦参考：结合卦象与所问之事（问题改动实时重算）。
+             2026-10-14 起，互 / 变视图也展示——用户要求三卦切换时都给断语参考；
+             引擎本身已含本·互·变三审叙述，故三卦所见为同一段整体断语。
+             :view 把当前查看的卦传给卡片，互 / 变视图会显示语境提示。 -->
+        <InterpretationCard :resolved="r" :question="question" :view="tab" />
+
+        <!-- 一键分享卡片：与上方解卦卡一样在三卦视图常驻（内容为整盘，与 tab 无关） -->
+        <ShareCard :resolved="r" :question="question" :context="context" />
+
         <!-- 互 / 变：该卦自己的推演事实 + 该卦上下卦类象 + 该卦错综。 -->
         <!-- 互卦来路：下互取二至四爻、上互取三至五爻（03 §3.4） -->
         <section v-if="tab === 'hu'" class="card">
@@ -450,11 +499,11 @@ const halfRows = computed(() => {
           <dl class="facts">
             <div class="fact">
               <dt>下互</dt>
-              <dd>本卦二至四爻 · {{ huFacts.lower.name }}（{{ elementCn(huFacts.lower.element) }}）</dd>
+              <dd>本卦二至四爻 · {{ huFacts.lower.name }}<span v-if="bil" class="bil-py"> {{ trigramPinyin(huFacts.lower.number) }}</span>（{{ elementCn(huFacts.lower.element) }}）</dd>
             </div>
             <div class="fact">
               <dt>上互</dt>
-              <dd>本卦三至五爻 · {{ huFacts.upper.name }}（{{ elementCn(huFacts.upper.element) }}）</dd>
+              <dd>本卦三至五爻 · {{ huFacts.upper.name }}<span v-if="bil" class="bil-py"> {{ trigramPinyin(huFacts.upper.number) }}</span>（{{ elementCn(huFacts.upper.element) }}）</dd>
             </div>
             <div class="fact">
               <dt>共用爻</dt>
@@ -494,7 +543,7 @@ const halfRows = computed(() => {
           <h3 class="card-title">上下卦类象</h3>
           <div v-for="row in halfRows" :key="row.key" class="xx-row">
             <b class="tag">
-              {{ row.label }} {{ row.trigram.name }} · {{ elementCn(row.trigram.element) }}
+              {{ row.label }} {{ row.trigram.name }}<span v-if="bil" class="bil-py"> {{ trigramPinyin(row.trigram.number) }}</span> · {{ elementCn(row.trigram.element) }}
             </b>
             <ul>
               <li v-for="c in XX_CATEGORIES" :key="c.key">
@@ -509,12 +558,14 @@ const halfRows = computed(() => {
           <dl class="facts">
             <div class="fact">
               <dt>错卦</dt>
-              <dd>{{ cuoZong.cuoName }}（{{ cuoZong.cuoSub }}）· 六爻阴阳相反</dd>
+              <dd>
+                {{ cuoZong.cuoName }}<span v-if="bil && hexagramPinyin(cuoZong.cuoName)" class="bil-py"> {{ hexagramPinyin(cuoZong.cuoName) }}</span>（{{ cuoZong.cuoSub }}）· 六爻阴阳相反
+              </dd>
             </div>
             <div class="fact">
               <dt>综卦</dt>
               <dd>
-                {{ cuoZong.zongName }}（{{ cuoZong.zongSub }}）·
+                {{ cuoZong.zongName }}<span v-if="bil && hexagramPinyin(cuoZong.zongName)" class="bil-py"> {{ hexagramPinyin(cuoZong.zongName) }}</span>（{{ cuoZong.zongSub }}）·
                 {{ cuoZong.zongSelf ? '六爻上下颠倒后仍为此卦' : '六爻上下颠倒' }}
               </dd>
             </div>
@@ -522,6 +573,9 @@ const halfRows = computed(() => {
         </section>
       </template>
     </section>
+
+    <!-- 六十四卦全图对照：常驻于排盘结果底部，高亮当前查看的卦（本 / 互 / 变随切换器同步） -->
+    <HexagramChart :current-upper="chartUpper" :current-lower="chartLower" />
   </div>
 </template>
 
@@ -529,7 +583,7 @@ const halfRows = computed(() => {
 .result {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: calc(14px * var(--font-scale));
 }
 
 .ctx {
@@ -610,12 +664,20 @@ const halfRows = computed(() => {
   color: var(--c-muted);
 }
 
+/* 双语：切换器下方的卦名拼音 */
+.tab-py {
+  font-size: var(--fs-xs);
+  letter-spacing: 0.5px;
+  color: var(--c-accent);
+  font-style: italic;
+}
+
 /* ---------- 详情面板（tabpanel：内部整块随 tab 重挂载） ---------- */
 
 .tabpanel {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: calc(14px * var(--font-scale));
 }
 
 .tabpanel:focus-visible {
@@ -625,7 +687,7 @@ const halfRows = computed(() => {
 .panel {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: calc(16px * var(--font-scale));
 }
 
 .p-head {
@@ -650,6 +712,30 @@ const halfRows = computed(() => {
   margin-left: auto;
   font-size: var(--fs-xs);
   color: var(--c-muted);
+}
+
+/* 双语：详情面板卦名旁的拼音与英文 */
+.p-py {
+  font-size: var(--fs-sm);
+  letter-spacing: 0.5px;
+  color: var(--c-accent);
+  font-style: italic;
+}
+
+.p-en {
+  margin-left: 6px;
+  font-size: var(--fs-xs);
+  letter-spacing: 0.5px;
+  color: var(--c-muted);
+  font-style: italic;
+}
+
+/* 双语：类象 / 推演事实中追加的八卦拼音（行内小字） */
+.bil-py {
+  font-size: 0.85em;
+  letter-spacing: 0.3px;
+  color: var(--c-accent);
+  font-style: italic;
 }
 
 /* ---------- 面板内的事实行（互卦构成 / 动爻与变爻 / 错卦·综卦） ---------- */
@@ -792,7 +878,7 @@ const halfRows = computed(() => {
 }
 
 [data-layout='desk'] .panel {
-  gap: 20px;
+  gap: calc(20px * var(--font-scale));
   padding: var(--sp-6);
 }
 </style>

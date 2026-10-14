@@ -187,6 +187,13 @@ input[type='number'] {
   color: var(--c-accent);
 }
 
+.btn-ghost:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  border-color: var(--c-line);
+  color: var(--c-muted);
+}
+
 .btn-danger {
   border-color: var(--c-accent);
   color: var(--c-accent);

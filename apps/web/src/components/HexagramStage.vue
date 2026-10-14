@@ -112,7 +112,7 @@ const ariaLabel = computed(() => {
 .mark {
   grid-column: 1;
   justify-self: end;
-  margin-right: 16px;
+  margin-right: calc(16px * var(--font-scale));
   padding: 3px 9px;
   border-radius: var(--r-pill);
   font-size: var(--fs-xs);
@@ -141,18 +141,18 @@ const ariaLabel = computed(() => {
   grid-column: 3;
 }
 
-/* 空带：约等于三个爻行的高度，是分组信号，不是空白失误 */
+/* 空带：约等于三个爻行的高度，是分组信号，不是空白失误（随字号整体缩放） */
 .band {
   width: 100%;
-  height: 26px;
+  height: calc(26px * var(--font-scale));
 }
 
 .stage.md .band {
-  height: 22px;
+  height: calc(22px * var(--font-scale));
 }
 
 .stage.sm .band {
-  height: 16px;
+  height: calc(16px * var(--font-scale));
 }
 
 /* 下卦接续上卦的逐爻浮现节奏（全局 glyph.css 只按 6 行给了 0.05–0.45 的序列） */

@@ -1,18 +1,27 @@
 <script setup lang="ts">
 /** 排盘结果页 —— 06 §3.2；保存卦例后提供「查看」动作（06 §五） */
-import { computed, onActivated, ref, watch } from 'vue';
-import { buildRecord, methodCn, type ResolvedHexagram } from '@plumora/core';
-import { TRIGRAMS } from '@plumora/knowledge';
+import { computed, onActivated, onMounted, ref, watch } from 'vue';
+import { buildRecord, methodCn } from '@plumora/core';
 import ResultPanel from '@/components/ResultPanel.vue';
+import { buildCastText } from '@/platform/castText';
 import { enforceRecordLimit, insertRecord } from '@/platform/records';
+import { copyText as copyToClipboard, shareTarget } from '@/platform/share';
+import { sharedResultPath, withSharedCast } from '@/platform/shareLink';
 import { goBack, navigate, replaceRoute, route } from '@/router';
-import { useCurrentCast } from '@/stores/cast';
+import { ensureResolved, useCurrentCast, useResolvedCast } from '@/stores/cast';
 import { refreshRecords } from '@/stores/records';
 import { useSettings } from '@/stores/settings';
 import { toast } from '@/stores/toast';
 
 const settings = useSettings();
 const current = useCurrentCast();
+/* 推导结果异步就位（六十四卦全表按需加载，见 stores/cast.ts 的文件头）。
+ * 正常路径：起卦时已经预热，进到本页时早就好了；
+ * 兜底路径：刷新 / 深链直接落在结果页 —— 这里补一次推导，期间显示占位。 */
+const resolved = useResolvedCast();
+onMounted(() => {
+  void ensureResolved();
+});
 /** 起卦前填写、随起卦结果带出；此处仍可修改，再决定是否保存为卦例 */
 const question = ref(current.value?.question ?? '');
 const saving = ref(false);
@@ -30,11 +39,17 @@ watch(
 );
 
 // 直接访问 /result（或刷新后会话丢失）时回到起卦页
+// KeepAlive 缓存本组件：每次激活（含「再起一卦」后回来）都要确认推导已就位
 onActivated(() => {
-  if (!current.value) replaceRoute('/cast');
+  if (!current.value) {
+    replaceRoute('/cast');
+    return;
+  }
+  void ensureResolved();
+  // 从别的 Tab 回来时地址栏已被导航覆盖（`#/result`），补回这一盘的分享参数
+  syncShareUrl();
 });
 
-const resolved = computed<ResolvedHexagram | null>(() => current.value?.resolved ?? null);
 const cast = computed(() => current.value?.cast ?? null);
 
 const title = computed(() => {
@@ -65,40 +80,90 @@ async function save() {
   }
 }
 
-/** 复制排盘文本（FR-11 的轻量替代；图片分享属 M3） */
+/** 复制排盘文本（FR-11）——文案见 platform/castText 的唯一实现。
+ *  图片分享走 ResultPanel 里的 ShareCard，链接分享走下方的 shareLink()。 */
 const copyText = computed(() => {
   const r = resolved.value;
   const c = cast.value;
   if (!r || !c) return '';
-  return [
-    '【观梅 · Plumora 排盘】',
-    current.value?.lunarLabel ?? '',
-    methodCn(c.method),
-    `本卦：${r.ben.name}（${TRIGRAMS[r.upper].name}上${TRIGRAMS[r.lower].name}下）动爻 ${r.movingLineName}`,
-    `互卦：${r.hu.name}　变卦：${r.bian.name}`,
-    `体：${TRIGRAMS[r.ti].name}　用：${TRIGRAMS[r.yong].name}`,
-    `${r.judge.summary}`,
-    `本卦卦意：${r.ben.keywords.join('、')}`,
-    '仅供传统文化学习研究使用',
-  ]
-    .filter(Boolean)
-    .join('\n');
+  return buildCastText({
+    resolved: r,
+    method: c.method,
+    lunarLabel: current.value?.lunarLabel ?? '',
+  });
 });
 
 async function copy() {
-  try {
-    await navigator.clipboard.writeText(copyText.value);
-    toast('已复制排盘文本');
-  } catch {
-    toast('当前环境不支持自动复制，请手动选择文本');
-  }
+  // 走 platform/share 的 copyText：局域网 http 下 navigator.clipboard 不可用，
+  // 它会降级到 textarea + execCommand（这个功能恰恰多用在局域网调试场景）
+  const ok = await copyToClipboard(copyText.value);
+  toast(ok ? '已复制排盘文本' : '当前环境不支持自动复制，请手动选择文本');
 }
 
 const isRecordDetail = computed(() => route.value.name === 'record-detail');
+
+/* ---------------------------------------------------------------
+ * 分享链接 —— 把这一整盘编进 URL（编码与校验见 platform/shareLink）
+ * ------------------------------------------------------------- */
+
+/** 分享用的绝对地址：走 shareTarget()，本机 localhost 会换成局域网地址（手机才点得开） */
+const shareUrl = computed(() => {
+  const c = current.value;
+  if (!c) return '';
+  return withSharedCast(shareTarget().url, c.cast, c.tiYongRule, c.castAt);
+});
+
+/** 有系统分享面板（手机）就直发，没有（桌面）就复制——按钮文案跟着变，别让人猜 */
+const shareLabel = computed(() =>
+  typeof navigator !== 'undefined' && typeof navigator.share === 'function'
+    ? '分享链接'
+    : '复制链接',
+);
+
+async function shareLink() {
+  const url = shareUrl.value;
+  if (!url) return;
+
+  if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+    try {
+      await navigator.share({ title: '观梅 · 排盘', url });
+      return; // 系统面板已接管：发微信 / 存备忘 / 隔空投送都走它
+    } catch (e) {
+      // 用户主动取消：什么都别做，也不要再弹一次「已复制」
+      if ((e as DOMException | undefined)?.name === 'AbortError') return;
+      // 其它失败（无权限 / 面板不可用）继续降级到复制
+    }
+  }
+
+  const ok = await copyToClipboard(url);
+  toast(ok ? '已复制排盘链接' : '当前环境不支持自动复制，请手动复制地址栏');
+}
+
+/**
+ * 把当前这一盘写进地址栏（replaceState：不产生历史记录、不触发 hashchange）。
+ *
+ * 为什么值得做：地址栏即状态。这一步之后，刷新、收藏、直接复制地址栏、
+ * 以及顶栏「手机扫码打开」（读的就是当前地址）全都自动带上这一盘，
+ * 不用为每个入口各做一套分享逻辑。
+ */
+function syncShareUrl(): void {
+  /* 守卫一：本组件被 KeepAlive 缓存，离开结果页后异步推导仍可能完成并触发联动；
+   * 不拦住就会把用户从卦例页 / 学习页硬拉回结果页。 */
+  if (route.value.name !== 'result') return;
+  const c = current.value;
+  if (!c) return;
+  const path = sharedResultPath(c.cast, c.tiYongRule, c.castAt);
+  // 守卫二：已经是这个地址（比如刚由分享链接进来）就不要白写一次
+  if (location.hash === `#${path}`) return;
+  replaceRoute(path);
+}
+
+// 起卦 / 采纳分享链接都会换掉 current；immediate 覆盖「刷新后直接落在结果页」
+watch(current, () => syncShareUrl(), { immediate: true });
 </script>
 
 <template>
-  <div v-if="resolved && cast" class="result-view">
+  <div v-if="cast" class="result-view">
     <header class="r-header">
       <button
         v-if="!isRecordDetail"
@@ -112,25 +177,31 @@ const isRecordDetail = computed(() => route.value.name === 'record-detail');
       <h1 class="title serif">{{ title }}</h1>
     </header>
 
-    <!-- 排盘结果（含三卦切换；解卦参考卡在其内部：生克结论卡之后、体用类象之前） -->
-    <ResultPanel :resolved="resolved" :context="current?.context" :question="question" />
+    <template v-if="resolved">
+      <!-- 排盘结果（含三卦切换；解卦参考卡在其内部：生克结论卡之后、体用类象之前） -->
+      <ResultPanel :resolved="resolved" :context="current?.context" :question="question" />
 
-    <!-- 起卦完成：所问之事已从起卦页带入（可修改），由用户决定是否保存卦例 -->
-    <section class="card save">
-      <h3 class="card-title">保存卦例（选填）</h3>
-      <div class="field">
-        <label for="q">所问之事（起卦前填写，此处可修改）</label>
-        <input id="q" v-model="question" type="text" maxlength="200" placeholder="默念所问，一事一占" />
-      </div>
-      <div class="ops">
-        <button type="button" class="btn-main" :disabled="saving" @click="save">保存卦例</button>
-        <button type="button" class="btn-ghost" @click="copy">复制排盘</button>
-      </div>
-    </section>
+      <!-- 起卦完成：所问之事已从起卦页带入（可修改），由用户决定是否保存卦例 -->
+      <section class="card save">
+        <h3 class="card-title">保存卦例（选填）</h3>
+        <div class="field">
+          <label for="q">所问之事（起卦前填写，此处可修改）</label>
+          <input id="q" v-model="question" type="text" maxlength="200" placeholder="默念所问，一事一占" />
+        </div>
+        <div class="ops">
+          <button type="button" class="btn-main" :disabled="saving" @click="save">保存卦例</button>
+          <button type="button" class="btn-ghost" @click="copy">复制排盘</button>
+          <button type="button" class="btn-ghost" @click="shareLink">{{ shareLabel }}</button>
+        </div>
+      </section>
 
-    <button type="button" class="btn-ghost block" @click="navigate('/cast')">再起一卦</button>
+      <button type="button" class="btn-ghost block" @click="navigate('/cast')">再起一卦</button>
 
-    <p class="foot">本应用仅供传统文化学习与研究使用。</p>
+      <p class="foot">本应用仅供传统文化学习与研究使用。</p>
+    </template>
+
+    <!-- 六十四卦全表按需加载，正常路径（起卦后进入）不会看到这里 -->
+    <p v-else class="pending" role="status" aria-live="polite">正在推导卦象…</p>
   </div>
 </template>
 
@@ -176,6 +247,9 @@ const isRecordDetail = computed(() => route.value.name === 'record-detail');
 
 .save .ops {
   display: flex;
+  /* 三颗按钮（保存 + 复制排盘 + 分享链接）在 320px 窄屏放不下一行时换行，
+     而不是把「保存卦例」挤成两行字 */
+  flex-wrap: wrap;
   gap: 10px;
 }
 
@@ -200,6 +274,13 @@ const isRecordDetail = computed(() => route.value.name === 'record-detail');
   padding-bottom: 8px;
   text-align: center;
   font-size: var(--fs-xs);
+  color: var(--c-muted);
+}
+
+.pending {
+  padding: 48px 0;
+  text-align: center;
+  font-size: var(--fs-sm);
   color: var(--c-muted);
 }
 </style>

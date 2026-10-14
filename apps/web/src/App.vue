@@ -28,24 +28,45 @@
  * 顶栏两行（产品反馈）：手机形态的第一行只放品牌标题（居左、独占整行），
  * 第二行放全部操作钮（右对齐）——两行错开，标题不再被按钮压缩。见 .appbar 样式。
  */
-import { computed, ref } from 'vue';
+import { computed, defineAsyncComponent, ref, watch } from 'vue';
 import CastView from '@/views/CastView.vue';
-import LearnView from '@/views/LearnView.vue';
-import RecordDetailView from '@/views/RecordDetailView.vue';
-import RecordsView from '@/views/RecordsView.vue';
-import ResultView from '@/views/ResultView.vue';
-import ShiYiPanel from '@/components/ShiYiPanel.vue';
 import DisclaimerGate from '@/components/DisclaimerGate.vue';
 import NavList from '@/components/NavList.vue';
-import QrCodeDialog from '@/components/QrCodeDialog.vue';
 import QrEntry from '@/components/QrEntry.vue';
-import SettingsPanel from '@/components/SettingsPanel.vue';
+import DeviceFrameToggle from '@/components/DeviceFrameToggle.vue';
 import ToastHost from '@/components/ToastHost.vue';
 import { route } from '@/router';
 import { useQrDialog } from '@/stores/qrDialog';
-import '@/stores/deviceFrame';
+import { useDeviceFrame } from '@/stores/deviceFrame';
+
+/* ---------- 懒加载视图与弹层 ----------
+ *
+ * 首屏只带起卦页（默认路由）。其余视图 / 弹层一律懒加载：它们各自拖着
+ * 知识库的大块（六十四卦全表、卦辞爻辞、十翼全文、二维码编码器），
+ * 而起卦首屏一个都用不到。实测这几块合计 gzip 约 90KB，
+ * 相当于首屏 JS 能砍掉约三分之一（直接顶 NFR-01 冷启动 ≤ 2s）。
+ */
+const LearnView = defineAsyncComponent(() => import('@/views/LearnView.vue'));
+const RecordDetailView = defineAsyncComponent(() => import('@/views/RecordDetailView.vue'));
+const RecordsView = defineAsyncComponent(() => import('@/views/RecordsView.vue'));
+const ResultView = defineAsyncComponent(() => import('@/views/ResultView.vue'));
+const ShiYiPanel = defineAsyncComponent(() => import('@/components/ShiYiPanel.vue'));
+const SettingsPanel = defineAsyncComponent(() => import('@/components/SettingsPanel.vue'));
+const QrCodeDialog = defineAsyncComponent(() => import('@/components/QrCodeDialog.vue'));
 
 const settingsOpen = ref(false);
+
+/**
+ * 「首次打开才挂载」闩：设置面板 / 二维码弹窗都是懒加载组件，
+ * 只有真正渲染过一次，它们的 chunk 才会被请求。
+ * 打开后保持挂载（不再 v-if 掉）——面板里可能留有输入态，
+ * 每次开关都重建会把这些状态抹掉。
+ */
+const settingsEverOpened = ref(false);
+const qrEverOpened = ref(false);
+watch(settingsOpen, (v) => {
+  if (v) settingsEverOpened.value = true;
+});
 
 /**
  * 侧栏收起状态（仅桌面形态有意义）。
@@ -80,11 +101,19 @@ function toggleSidebar(): void {
  * 顶栏 / 侧栏图标与设置面板里的原入口共用 stores/qrDialog 的同一份状态。
  */
 const { qrOpen, closeQr } = useQrDialog();
+watch(qrOpen, (v) => {
+  if (v) qrEverOpened.value = true;
+});
 
 /**
  * 手机框预览（真机框）：宽屏 + 手机形态时自动套框，顶栏框图标可进出。
  * 解构出顶层 ref 才能在模板里自动解包（store 返回的普通对象不会被解包）。
+ *
+ * ⚠️ 这个图标是**唯一**的退出口：stores/deviceFrame.ts 的退出路径只有
+ * 「点图标」和「形态不再适用」，而形态不再适用在真机窄屏上永远不会发生
+ * （手机 UA 恒为手机形态）。少了它，横屏平板 / 大屏手机一进框就出不来。
  */
+const { available: frameAvailable } = useDeviceFrame();
 
 const view = computed(() => {
   switch (route.value.name) {
@@ -187,6 +216,9 @@ const brandMark = './icon.svg';
           </div>
         </div>
         <div class="appbar-ops">
+          <!-- 手机框预览开关：只在「宽屏 + 手机形态」出现（store 的 available 判据），
+               真机窄屏永不渲染，不会挤占顶栏位置 -->
+          <DeviceFrameToggle v-if="frameAvailable" />
           <QrEntry variant="bar" />
           <button type="button" class="icon-btn" aria-label="设置" @click="settingsOpen = true">
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -225,8 +257,18 @@ const brandMark = './icon.svg';
       </div>
     </div>
 
-    <SettingsPanel :open="settingsOpen" @close="settingsOpen = false" />
-    <QrCodeDialog :open="qrOpen" @close="closeQr" />
+    <!--
+      两个懒加载弹层都加「首次打开才挂载」闩（settingsEverOpened / qrEverOpened）：
+      v-if 是懒加载真正生效的前提 —— 组件即便异步，只要首屏就渲染，
+      chunk 依旧会被立刻请求，拆包等于白做。
+      挂载之后不再卸载（闩只置真），面板内的输入态得以保留。
+    -->
+    <SettingsPanel
+      v-if="settingsEverOpened"
+      :open="settingsOpen"
+      @close="settingsOpen = false"
+    />
+    <QrCodeDialog v-if="qrEverOpened" :open="qrOpen" @close="closeQr" />
     <ToastHost />
     <DisclaimerGate />
   </div>

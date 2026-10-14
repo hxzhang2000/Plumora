@@ -20,6 +20,26 @@ export type TiYongRule =
   /** 手写笔记流派：不问动爻位置，上卦恒为用、下卦恒为体 */
   | 'UPPER_YONG_LOWER_TI';
 
+/**
+ * 时间起卦的精度口径（03 文档 §2.1 / §6.6，2026-10-14 新增）
+ *
+ * 传统口径只取「时辰」（每两小时一档），同一时辰内反复起卦结果完全相同。
+ * 为解决该问题，动爻可追加更细的时间单位参与取余：
+ *   - SHICHEN：仅时辰，合 03 文档 §2.1 原公式，可手算复核；
+ *   - MINUTE：动爻追加分钟数；
+ *   - SECOND：动爻追加分钟 + 秒数（粒度最细，与两字笔画起卦的秒数口径一致）。
+ *
+ * **只影响动爻**：上卦 / 下卦仍由 年支 + 农历月 + 农历日 + 时辰 决定，
+ * 因此三种精度下同一时辰的卦体不变，仅动爻可能不同。
+ */
+export type TimePrecision = 'SHICHEN' | 'MINUTE' | 'SECOND';
+
+export const TIME_PRECISION_CN: Readonly<Record<TimePrecision, string>> = {
+  SHICHEN: '传统时辰',
+  MINUTE: '时辰 + 分钟',
+  SECOND: '时辰 + 分 + 秒',
+};
+
 /** 生克关系（04 文档 §2.2 relation 字段取值） */
 export type Relation =
   | 'YONG_SHENG_TI'
@@ -78,6 +98,14 @@ export interface TimeCastParams {
   readonly s2: number;
   /** 是否为晚子时（23:00 后按次日计） */
   readonly shifted: boolean;
+  /** 时间精度口径（03 文档 §6.6）；旧记录缺省按 SHICHEN 处理 */
+  readonly precision: TimePrecision;
+  /** 起卦时刻分钟 0–59（手动输入时间为 0） */
+  readonly minute: number;
+  /** 起卦时刻秒钟 0–59（手动输入时间为 0） */
+  readonly second: number;
+  /** 动爻取余所用之和 = S2 + 细项（细项 = 分 / 分+秒，SHICHEN 时为 0） */
+  readonly movingSum: number;
 }
 
 export interface NumberCastParams {
@@ -155,6 +183,17 @@ export type InputParams =
        * 兼容历史数据：旧记录无此字段，读取时按 `false` 处理。
        */
       shifted?: boolean;
+      /**
+       * 时间精度口径（03 §6.6，2026-10-14 新增）。
+       * 兼容历史数据：旧记录无此字段，读取时按 'SHICHEN'（传统时辰）处理。
+       */
+      precision?: TimePrecision;
+      /** 起卦时刻分钟 0–59；手动输入时间为 0。旧记录无此字段 */
+      minute?: number;
+      /** 起卦时刻秒钟 0–59；手动输入时间为 0。旧记录无此字段 */
+      second?: number;
+      /** 动爻取余所用之和 = S2 + 细项；旧记录无此字段时等于 S2 */
+      movingSum?: number;
     }
   | { type: 'NUMBER'; mode: 'TWO'; n1: number; n2: number }
   | { type: 'NUMBER'; mode: 'ONE'; n1: number; hourNo: number }

@@ -18,7 +18,9 @@ import {
 } from '@plumora/core';
 import ConfirmDialog from '@/components/ConfirmDialog.vue';
 import ResultPanel from '@/components/ResultPanel.vue';
-import { deleteRecord, getRecord, updateRecord } from '@/platform/records';
+import { buildCastText } from '@/platform/castText';
+import { deleteRecord, getRecord, restoreRecords, updateRecord } from '@/platform/records';
+import { copyText as copyToClipboard } from '@/platform/share';
 import { goBack, navigate, replaceRoute, route } from '@/router';
 import { refreshRecords } from '@/stores/records';
 import { toast } from '@/stores/toast';
@@ -105,6 +107,17 @@ const context = computed(() => {
         // 与 core castContext 同一措辞），这里不再重复中间量算式；
         // 晚子时按次日计是唯一需要补的事实。
         if (p.shifted) parts.push('晚子时 · 按次日计');
+        // 时间精度（03 §6.6）：细项确实参与了取余才展示，否则同一时辰内两次起卦的
+        // 详情会同形，无法复盘动爻为何不同。旧记录无这些字段 → 不展示（传统时辰）。
+        // S2 = 年支 + 农历月 + 农历日 + 时辰，与 core castByTimeParts 同式。
+        const s2 = p.yearBranchNo + p.lunarMonth + p.lunarDay + p.hourNo;
+        if (p.precision && p.precision !== 'SHICHEN' && p.movingSum !== undefined && p.movingSum !== s2) {
+          parts.push(
+            p.precision === 'SECOND'
+              ? `分 ${p.minute ?? 0} 秒 ${p.second ?? 0}`
+              : `分钟 ${p.minute ?? 0}`,
+          );
+        }
         break;
       case 'NUMBER':
         parts.push(p.mode === 'TWO' ? `两数 ${p.n1}、${p.n2}` : `一数 ${p.n1}，时辰 ${p.hourNo}`);
@@ -127,6 +140,17 @@ const context = computed(() => {
 
 function markDirty() {
   dirty.value = true;
+}
+
+/** 复制本卦排盘文本 —— 与结果页共用 platform/castText，措辞一致 */
+async function copyCast() {
+  const rec = record.value;
+  const r = resolved.value;
+  if (!rec || !r) return;
+  const ok = await copyToClipboard(
+    buildCastText({ resolved: r, method: rec.method, lunarLabel: rec.lunarLabel }),
+  );
+  toast(ok ? '已复制排盘文本' : '当前环境不支持自动复制，请手动选择文本');
 }
 
 async function save() {
@@ -161,6 +185,8 @@ async function doDelete() {
     toast('未能识别卦例编号，删除已取消');
     return;
   }
+  // 删除前留底，用于「撤销」——删掉就没有别的来源能还原了
+  const snapshot = record.value;
   try {
     await deleteRecord(target);
   } catch (e) {
@@ -168,8 +194,31 @@ async function doDelete() {
     return;
   }
   await refreshRecords();
-  toast('已删除');
   navigate('/records');
+  if (!snapshot) {
+    toast('已删除');
+    return;
+  }
+  toast(
+    '已删除',
+    {
+      label: '撤销',
+      run: () => void undoDelete(snapshot),
+    },
+    6000,
+  );
+}
+
+/** 撤销删除：原样回写（保留 id），并把用户带回该话例详情 */
+async function undoDelete(snapshot: HexagramRecord) {
+  try {
+    await restoreRecords([snapshot]);
+  } catch (e) {
+    toast(`撤销失败：${messageOf(e)}`);
+    return;
+  }
+  await refreshRecords();
+  toast('已恢复该卦例', { label: '查看', run: () => navigate(`/records/${snapshot.id}`) }, 5000);
 }
 </script>
 
@@ -195,6 +244,8 @@ async function doDelete() {
     <template v-else-if="resolved && record">
       <!-- 排盘结果（含三卦切换；解卦参考卡在其内部：生克结论卡之后、体用类象之前） -->
       <ResultPanel :resolved="resolved" :context="context" :question="question" />
+
+      <button type="button" class="btn-ghost block" @click="copyCast">复制排盘文本</button>
 
       <section class="card">
         <h3 class="card-title">卦例复盘</h3>
@@ -239,7 +290,7 @@ async function doDelete() {
   <ConfirmDialog
     :open="confirmDelete"
     title="删除卦例"
-    :message="`将删除「${heading}」· ${record?.lunarLabel ?? ''}，此操作不可恢复。`"
+    :message="`将删除「${heading}」· ${record?.lunarLabel ?? ''}。删除后数秒内可点底部提示条的「撤销」恢复。`"
     confirm-text="确认删除"
     danger
     @cancel="confirmDelete = false"

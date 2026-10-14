@@ -38,16 +38,57 @@ const dom = new JSDOM(
 const { window } = dom;
 
 /* jsdom 未实现的宿主能力：补最小桩 */
-if (!window.matchMedia) {
-  window.matchMedia = () => ({
-    matches: false,
-    addEventListener() {},
-    removeEventListener() {},
-    addListener() {},
-    removeListener() {},
+
+/**
+ * 视口断点的**可控**桩。
+ *
+ * jsdom 自带 matchMedia，但恒 matches:false 且不会触发 change（无排版引擎）。
+ * 这里无条件换成可控桩，并**记录监听器**——布局形态与手机框预览的自动重算都走
+ * watchViewport 的 change 订阅（stores/settings.ts 与 stores/deviceFrame.ts 各订一份）。
+ * 桩若像原来那样把监听器丢掉，测试就只能手改 <html> 属性，那样子系统接线断了也照过。
+ */
+const viewportListeners = [];
+let viewportIsDesktop = false;
+
+function fireViewportChange() {
+  for (const fn of [...viewportListeners]) fn();
+}
+
+window.matchMedia = (query) => ({
+  get matches() {
+    return query.includes('900px') ? viewportIsDesktop : false;
+  },
+  media: query,
+  addEventListener: (_type, fn) => void viewportListeners.push(fn),
+  removeEventListener: (_type, fn) => {
+    const i = viewportListeners.indexOf(fn);
+    if (i >= 0) viewportListeners.splice(i, 1);
+  },
+  addListener() {},
+  removeListener() {},
+});
+window.scrollTo = () => {};
+
+/** 换 UA：jsdom 的 navigator.userAgent 是只读 getter，整对象替换才能改 */
+const nativeNavigator = window.navigator;
+
+function setUserAgent(ua) {
+  Object.defineProperty(window, 'navigator', {
+    value: {
+      userAgent: ua,
+      maxTouchPoints: 5,
+      language: 'zh-CN',
+      languages: ['zh-CN'],
+      platform: '',
+    },
+    configurable: true,
   });
 }
-window.scrollTo = () => {};
+
+const DESKTOP_UA =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36';
+const PHONE_UA =
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1';
 
 /* jsdom 没有 IndexedDB → platform/records.ts 会直接 reject，卦例列表永远只有空态。
  * 挂一个最小替身，好让「保存 → 列表」这条链路真的跑起来（见 idb-stub.cjs 的说明）。 */
@@ -110,129 +151,91 @@ async function inspect(hash, mustContain) {
 }
 
 /**
- * 断言「电脑模式 / 手机模式」切换真的生效。
+ * 断言「布局形态自动识别」链路真的通电（手动「电脑 / 手机」切换已下线）。
  *
- * 只看按钮点了没用：判据是 `<html data-layout>`，而 CSS 的断点必须同步改成
- * `[data-layout='desk'] &` 才会响应。若哪天有人把 CSS 改回 `@media`，
- * data-layout 照样会变、按钮照样会换文案，但界面一动不动——
- * 所以这里除了断言属性翻转，还要断言样式表里**确有** data-layout 规则
- * （jsdom 无排版引擎，getComputedStyle 靠不住，改用结构断言）。
+ * 原实现断言切换按钮的往返——按钮随设备自动识别一同下线（2026-10-13 用户要求），
+ * 断言成了**永久 FAIL 的死护栏**：按钮没了，`data-layout` 的接线却再没人看守。
+ *
+ * 现在守的是自动识别链路：UA / 视口 → detectDeviceKind → resolveLayout →
+ * applyLayout → `<html data-layout>`，以及视口跨断点时 watchViewport 的重算。
+ * 做法是换 UA / 视口桩后**触发已注册的视口监听**，让应用自己重算——直接手改
+ * `<html>` 属性的话，接线断了也照过。
+ *
+ * 顺带覆盖手机框预览（原先由 inspectDeviceFrame 负责，但其靠点布局按钮强行切形态，
+ * 按钮下线后该函数已成死代码）：宽屏 + 手机形态应自动套框，框图标能出。
+ *
+ * 样式侧断言直接读构建产物（jsdom 无排版引擎，getComputedStyle 靠不住，改用结构断言）：
+ * 必须确有 `[data-layout='desk']` 与 `[data-device='phone']` 规则，且不得残留
+ * `@media (min-width: 900px)`——残留意味着属性照变、界面一动不动。
  */
-async function inspectLayoutToggle() {
+async function inspectAutoLayout() {
   const doc = window.document;
   const html = doc.documentElement;
 
-  const before = html.getAttribute('data-layout');
-  const btn = doc.querySelector('[aria-label^="切换布局"]');
-  if (!btn) {
-    console.log('  FAIL #布局切换   找不到切换按钮');
-    return false;
-  }
-
-  btn.click();
-  await sleep(160);
-  const after = html.getAttribute('data-layout');
-
-  // 再点一次必须能切回来——只放一个按钮、切过去就切不回来是这个功能的典型死局
-  const btn2 = doc.querySelector('[aria-label^="切换布局"]');
-  btn2.click();
-  await sleep(160);
-  const back = html.getAttribute('data-layout');
-
-  /**
-   * 样式侧断言直接读构建产物（dist/web.css）。
-   *
-   * jsdom 里没有样式表：CSS 是独立产物，冒烟只 eval 了 app.js，
-   * 所以 document.styleSheets 是空的——在那上面做断言会得到「永远不通过」。
-   * 读磁盘上的 CSS 反而更准：既能确认断点规则存在，也能确认没人把它改回
-   * `@media (min-width: 900px)`（改回去的话 data-layout 照变、界面一动不动）。
-   */
   const cssPath = path.join(DIST, 'web.css');
   const raw = fs.existsSync(cssPath) ? fs.readFileSync(cssPath, 'utf8') : '';
   // 先剥掉注释再匹配：说明性注释里出现「@media (min-width: 900px)」这类字样很正常，
   // 不该让护栏的判定跟着注释变。
   const css = raw.replace(/\/\*[\s\S]*?\*\//g, '');
-  const hasRule = css.includes("data-layout='desk'") || css.includes('data-layout="desk"');
+  const hasLayoutRule = css.includes("data-layout='desk'") || css.includes('data-layout="desk"');
+  const hasDeviceRule = css.includes("data-device='phone'") || css.includes('data-device="phone"');
   const hasMedia = /@media[^{]*min-width:\s*900px/.test(css);
 
-  const ok = before !== after && back === before && after !== '' && hasRule && !hasMedia;
-  console.log(
-    `${ok ? '  ok  ' : '  FAIL'} #布局切换   ${before} → ${after} → ${back}；` +
-      `断点规则 data-layout ${hasRule ? '有' : '缺'} / 残留 @media 900px ${hasMedia ? '有' : '无'}`,
-  );
-  return ok;
-}
-
-/**
- * 断言「手机框预览」：宽屏 + 手机形态 → <html data-device="phone">，
- * 且框图标能进、能出、退了还能再进（「只进不出」会把用户锁死在机身里）。
- *
- * jsdom 的 matchMedia 桩恒为 false（视口视为窄屏），正好卡住进框判据的另一半，
- * 所以先换成「宽屏」桩，再点两次布局开关（手机 → 电脑 → 手机）把形态定死为「手机」——
- * available 的重算靠 layoutMode 变更触发，强制值本身不受视口影响。
- * 末尾把桩还原、并停在未套框状态，别污染后续断言。
- *
- * 样式侧同 inspectLayoutToggle：jsdom 无样式表，直接读构建产物确认 data-device 规则存在
- * （否则属性照变、界面无反应）。须在 inspectSettings 之前调用（面板处于关闭态）。
- */
-async function inspectDeviceFrame() {
-  const doc = window.document;
-  const html = doc.documentElement;
-
-  const cssPath = path.join(DIST, 'web.css');
-  const raw = fs.existsSync(cssPath) ? fs.readFileSync(cssPath, 'utf8') : '';
-  const css = raw.replace(/\/\*[\s\S]*?\*\//g, '');
-  const hasRule = css.includes("data-device='phone'") || css.includes('data-device="phone"');
-
-  const layoutBtn = () => doc.querySelector('[aria-label^="切换布局"]');
-  const frameBtn = () => doc.querySelector('[aria-label^="手机框预览"]');
-  const deviceOn = () => html.getAttribute('data-device') === 'phone';
-
-  const originMatchMedia = window.matchMedia;
-  window.matchMedia = (q) => ({
-    matches: q.includes('900px'),
-    media: q,
-    addEventListener() {},
-    removeEventListener() {},
-    addListener() {},
-    removeListener() {},
-  });
-
+  const layout = () => html.getAttribute('data-layout');
+  const framed = () => html.getAttribute('data-device') === 'phone';
   const problems = [];
-  if (deviceOn()) problems.push('进框前 data-device 已是 phone（初值不对）');
 
-  // 手机 → 电脑 → 手机：第二次落回手机形态时，宽屏 + 手机形态应自动套框
-  layoutBtn().click();
-  await sleep(160);
-  layoutBtn().click();
-  await sleep(200);
+  const setWide = (wide) => {
+    viewportIsDesktop = wide;
+    fireViewportChange();
+  };
 
-  if (!deviceOn()) problems.push('宽屏切到手机形态后未自动套框');
-  if (!frameBtn()) problems.push('套框后顶栏没有框图标（无法退出）');
+  // ① 接线通电：窄视口初值应为手机形态（属性缺失则所有 [data-layout] 规则静默失效）
+  if (layout() !== 'mobile') problems.push(`窄视口初值应为 mobile，实际 ${layout()}`);
 
-  // 退出 → 框图标应仍在（当前是「宽屏 + 手机形态」，可再进）
-  frameBtn() && frameBtn().click();
-  await sleep(160);
-  if (deviceOn()) problems.push('点框图标后未退出机身');
+  // ② 桌面 UA + 宽窗 → 桌面形态
+  setUserAgent(DESKTOP_UA);
+  setWide(true);
+  await sleep(180);
+  if (layout() !== 'desk') problems.push(`桌面 UA + 宽窗未重算为 desk（实际 ${layout()}）`);
+  if (framed()) problems.push('桌面形态不应套手机框');
 
-  // 再进 → 抑制标记应被复位（否则退出一次就再也进不去了）
-  if (frameBtn()) {
-    frameBtn().click();
-    await sleep(160);
-    if (!deviceOn()) problems.push('退出后无法再次进入机身');
-    frameBtn().click();
-    await sleep(160);
-    if (deviceOn()) problems.push('第二次退出未生效');
-  } else {
-    problems.push('退出后框图标消失（无法再进）');
+  // ③ 手机 UA + 宽窗 → 仍为手机形态（UA 压过视口），且自动套手机框
+  setUserAgent(PHONE_UA);
+  setWide(true);
+  await sleep(220);
+  if (layout() !== 'mobile') problems.push(`手机 UA + 宽窗应按 mobile（实际 ${layout()}）`);
+  if (!framed()) problems.push('宽屏 + 手机形态未自动套手机框');
+
+  // 框图标要能出——「只进不出」会把用户锁死在机身里
+  const frameBtn = doc.querySelector('[aria-label^="手机框预览"]');
+  if (!frameBtn) problems.push('套框后顶栏没有框图标（无法退出）');
+  else {
+    frameBtn.click();
+    await sleep(180);
+    if (framed()) problems.push('点框图标后未退出机身');
+    // 退出后还能再进：抑制标记须被 toggleDeviceFrame 复位，否则退出一次就再也进不去
+    frameBtn.click();
+    await sleep(180);
+    if (!framed()) problems.push('退出后无法再次进入机身');
+    frameBtn.click();
+    await sleep(180);
+    if (framed()) problems.push('第二次退出未生效');
   }
 
-  window.matchMedia = originMatchMedia;
+  // ④ 还原环境，别污染后续断言：桌面 UA + 窄窗 → mobile，且不套框
+  setUserAgent(DESKTOP_UA);
+  setWide(false);
+  await sleep(220);
+  if (layout() !== 'mobile') problems.push(`还原后窄窗应为 mobile（实际 ${layout()}）`);
+  if (framed()) problems.push('还原后仍套着手机框');
 
-  const ok = problems.length === 0 && hasRule;
+  const ok = problems.length === 0 && hasLayoutRule && hasDeviceRule && !hasMedia;
   console.log(
-    `${ok ? '  ok  ' : '  FAIL'} #手机框     data-device ${deviceOn() ? 'phone' : '—'} / ` +
-      `进出往返 ${problems.length ? '异常' : '正常'} / 样式规则 ${hasRule ? '有' : '缺'}` +
+    `${ok ? '  ok  ' : '  FAIL'} #布局识别   形态 ${layout()} / ` +
+      `手机框进出 ${problems.length ? '异常' : '正常'} / ` +
+      `样式规则 desk ${hasLayoutRule ? '有' : '缺'} phone ${hasDeviceRule ? '有' : '缺'} / ` +
+      `残留 @media 900px ${hasMedia ? '有' : '无'}` +
       (problems.length ? `；${problems.join('；')}` : ''),
   );
   return ok;
@@ -471,20 +474,48 @@ async function inspectModalResidue() {
 }
 
 /**
- * 断言设置抽屉在**关闭态**真的不可达（审查 W-7）。
+ * 断言设置抽屉**从未打开前**根本没被挂载（懒加载契约）。
  *
- * 原实现只用 transform: translateX(102%) 把面板挪出视口，控件仍在 Tab 序与
- * 无障碍树里 —— 键盘用户从起卦页一路 Tab 会「消失」到屏幕外，并能聚焦到
- * 「清空全部卦例」这类不可逆按钮。
+ * 设置面板拖着六十四卦全表（约 48KB gzip），首屏并不需要它，因此改为
+ * 懒加载 + 首次打开才 v-if 挂载。这条断言同时守住两件事：
+ *   ① 拆包没有退化（面板 chunk 若被首屏静态拉回，节点会一直存在）；
+ *   ② 关闭态可达性（W-7）由「不在 DOM」这一更强形态保证 ——
+ *     连 inert 都不需要，键盘用户根本 Tab 不到。
+ * 关闭态的 inert / aria-hidden 另见 inspectSettingsDrawerClosed()。
  *
- * jsdom 没有排版引擎、也不计算 Tab 序，所以这里只能断言属性契约
- * （inert + aria-hidden）确实被写上；真机可聚焦性由人工走查覆盖。
  * 须在 inspectSettings 打开面板**之前**调用。
  */
-function inspectSettingsDrawerA11y() {
+function inspectSettingsDrawerLazy() {
+  const panel = window.document.querySelector('aside[aria-label="设置"]');
+  const ok = !panel;
+  console.log(
+    `${ok ? '  ok  ' : '  FAIL'} #设置懒加载  ` +
+      (ok ? '未打开前未挂载（首屏不含面板 chunk）' : '未打开却已挂载 —— 懒加载失效'),
+  );
+  return ok;
+}
+
+/**
+ * 断言设置抽屉**打开后再关闭**时属性契约确实写上（审查 W-7）。
+ *
+ * 面板一旦挂载就常驻 DOM（只挪出视口），此时必须靠 inert + aria-hidden
+ * 让它退出 Tab 序与无障碍树。jsdom 没有排版引擎、也不计算 Tab 序，
+ * 所以这里只能断言属性；真机可聚焦性由人工走查覆盖。
+ *
+ * 须在 inspectSettings 打开面板**之后**调用。
+ */
+async function inspectSettingsDrawerClosed() {
+  const closeBtn = window.document.querySelector('button[aria-label="关闭设置"]');
+  if (!closeBtn) {
+    console.log('  FAIL #设置抽屉   找不到关闭按钮');
+    return false;
+  }
+  closeBtn.click();
+  await sleep(120);
+
   const panel = window.document.querySelector('aside[aria-label="设置"]');
   if (!panel) {
-    console.log('  FAIL #设置抽屉   找不到设置面板节点');
+    console.log('  FAIL #设置抽屉   关闭后面板节点消失了（常驻 DOM 的约定被打破）');
     return false;
   }
   const inert = panel.hasAttribute('inert');
@@ -583,6 +614,122 @@ async function inspectNumberCast() {
   return ok;
 }
 
+/**
+ * 分享链接端到端（platform/shareLink + router + ResultView 的地址栏同步）。
+ *
+ * 为什么值得单独守一条：这三个文件各自单测都过，但「接线」只有真跑一遍才看得出来。
+ * 必须同时成立的几件事：
+ *   ① 排盘就位后地址栏自动带上分享参数 —— 否则「手机扫码打开」「复制地址栏」
+ *      这些入口全落空（二维码扫出来是个打不开的空结果页）；
+ *   ② 参数能把一整盘还原回来，并且**覆盖**本机已有的排盘（点开别人的链接，
+ *      看到的就是那一盘）；
+ *   ③ 参数坏掉时安静回退到本机排盘，不许白屏。
+ *
+ * 载荷用 base64url 编 JSON，解码失败即视为没有参数（见 shareLink.ts）。
+ */
+const encodePayload = (obj) => Buffer.from(JSON.stringify(obj), 'utf8').toString('base64url');
+const decodePayload = (raw) => {
+  try {
+    return JSON.parse(Buffer.from(raw, 'base64url').toString('utf8'));
+  } catch {
+    return null;
+  }
+};
+
+async function inspectSharedLink() {
+  const fail = (why) => {
+    console.log(`  FAIL #分享链接  ${why}`);
+    return false;
+  };
+  const doc = window.document;
+  const textNow = () => (doc.querySelector('#app')?.textContent ?? '').replace(/\s+/g, ' ');
+
+  // ① 地址栏同步：上一步是数字起卦 3 / 8，结果页停稳后 hash 应带上参数
+  const matched = /^#\/result\?c=([A-Za-z0-9_-]+)$/.exec(window.location.hash);
+  if (!matched) return fail(`结果页地址栏未带上分享参数（hash=${window.location.hash}）`);
+
+  const payload = decodePayload(matched[1]);
+  const c = payload && payload.c;
+  if (!c || c.method !== 'NUMBER' || !c.params || c.params.n1 !== 3 || c.params.n2 !== 8) {
+    return fail(`载荷里的起卦输入不对：${matched[1].slice(0, 40)}`);
+  }
+  if ('question' in payload) return fail('载荷里不该有所问之事（隐私）');
+
+  // ② 还原并覆盖本机排盘：用一条**别的**盘（坎上巽下动 1 → 水风井）当朋友的链接
+  const link = encodePayload({
+    v: 1,
+    c: {
+      method: 'TIME',
+      upper: 6,
+      lower: 5,
+      moving: 1,
+      label: '丙午年 八月十五 午时',
+      params: {
+        yearBranchNo: 7,
+        lunarMonth: 8,
+        lunarDay: 15,
+        hourNo: 7,
+        s1: 30,
+        s2: 37,
+        shifted: false,
+        precision: 'SHICHEN',
+        minute: 0,
+        second: 0,
+        movingSum: 37,
+      },
+    },
+    r: 'MOVING_LINE',
+    t: 1_600_000_000_000,
+  });
+
+  window.location.hash = `#/result?c=${link}`;
+  await sleep(260);
+  const text = textNow();
+  const adopted =
+    text.includes('水风井') && text.includes('体生用') && text.includes('小凶') && !text.includes('火地晋');
+  if (!adopted) return fail(`打开分享链接后页面不是那一盘：${text.slice(0, 90)}`);
+
+  // ③ 坏参数不许白屏、也不许把当前这一盘清掉
+  window.location.hash = '#/result?c=!!!not-a-payload!!!';
+  await sleep(220);
+  const stillThere = textNow().includes('水风井') && doc.querySelector('#app').children.length > 0;
+  if (!stillThere) return fail('坏参数把当前排盘弄丢了（或白屏）');
+
+  console.log(
+    `  ok   #分享链接   地址栏同步 ${matched[1].length} 字符 / 链接复原水风井 / 坏参数静默回退`,
+  );
+  return true;
+}
+
+/**
+ * 断言 PWA manifest 的图标文件都真实存在，且至少有一枚 maskable。
+ *
+ * 为什么需要：maskable 图标缺失时浏览器**不会报错**——安卓把 any 图标按方形裁切，
+ * 四角露白或裁掉笔画，从代码、DOM、控制台都看不出问题。
+ * 与 inspectBrandIcons 同样「查磁盘」：manifest 里的 src 是相对路径，直接核对文件。
+ */
+function inspectManifestIcons() {
+  const manifestPath = path.join(PUBLIC_DIR, 'manifest.webmanifest');
+  let manifest;
+  try {
+    manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  } catch {
+    console.log('  FAIL #PWA图标   manifest.webmanifest 缺失或不是合法 JSON');
+    return false;
+  }
+  const icons = Array.isArray(manifest.icons) ? manifest.icons : [];
+  const missing = icons
+    .map((i) => (i && typeof i.src === 'string' ? i.src.replace(/^\.\//, '') : ''))
+    .filter((s) => s && !fs.existsSync(path.join(PUBLIC_DIR, s)));
+  const maskables = icons.filter((i) => String(i && i.purpose).includes('maskable'));
+  const ok = icons.length > 0 && missing.length === 0 && maskables.length > 0;
+  console.log(
+    `${ok ? '  ok  ' : '  FAIL'} #PWA图标   共 ${icons.length} 枚 / maskable ${maskables.length} 枚 / ` +
+      `缺失文件 ${missing.length ? missing.join('、') : '无'}`,
+  );
+  return ok;
+}
+
 (async () => {
   await sleep(300);
   const results = [];
@@ -603,11 +750,11 @@ async function inspectNumberCast() {
   // 弹窗跨路由残留（W-1 / W-2）——须在列表页有卦例之后
   results.push(await inspectModalResidue());
 
-  // 布局形态切换（电脑模式 / 手机模式）——须在打开设置面板之前
-  results.push(await inspectLayoutToggle());
+  // 布局形态自动识别 + 手机框预览（手动切换已下线）——须在打开设置面板之前
+  results.push(await inspectAutoLayout());
 
-  // 设置抽屉关闭态可达性（W-7）——须在打开设置面板之前
-  results.push(inspectSettingsDrawerA11y());
+  // 设置抽屉懒加载契约（W-7 / 首屏瘦身）——须在打开设置面板之前
+  results.push(inspectSettingsDrawerLazy());
 
   // 版本接线端到端：设置面板「关于」区显示的版本号必须与真源一致
   const expectVersion = JSON.parse(fs.readFileSync(VERSION_JSON, 'utf8')).version;
@@ -619,9 +766,18 @@ async function inspectNumberCast() {
   // 图标接线（须在设置面板打开后执行）
   results.push(inspectBrandIcons());
 
+  // 设置抽屉关闭态可达性（W-7）——会关掉面板，须排在依赖面板打开的断言之后
+  results.push(await inspectSettingsDrawerClosed());
+
+  // PWA manifest 图标（纯文件断言，与 DOM 无关）
+  results.push(inspectManifestIcons());
+
   // 数字起卦端到端（回归：v-model 对 type="number" 自动转 number，旧代码 .trim() 会炸）。
   // 放在最后：它会把当前排盘换成数字起卦结果，不能覆盖前面依赖金标准 A 的断言。
   results.push(await inspectNumberCast());
+
+  // 分享链接端到端 —— 依赖上一步留下的数字起卦结果（地址栏同步 / 换盘复原）
+  results.push(await inspectSharedLink());
 
   console.log('\n运行时错误 :', errors.length ? errors : '无');
   const ok = results.every(Boolean) && errors.length === 0;

@@ -10,9 +10,10 @@
  *   2. 二维码跟随主题配色：浅色模块 + 深底色能被部分现代解码器识别，但失败率
  *      明显上升。这里固定白底深模块，不跟主题走。
  */
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { qrSvg } from '@/platform/qrcode';
 import { copyText, shareTarget } from '@/platform/share';
+import { useDialog } from '@/platform/useDialog';
 import { toast } from '@/stores/toast';
 
 const props = defineProps<{ open: boolean }>();
@@ -25,36 +26,27 @@ const copied = ref(false);
 
 const dialogEl = ref<HTMLElement | null>(null);
 
-function onKey(e: KeyboardEvent) {
-  if (!props.open) return;
-  const root = dialogEl.value;
-  const t = e.target as Node | null;
-  if (!root || !t || !root.contains(t)) return;
-  // 焦点在按钮上时 Enter 会合成 click，别再处理一次
-  if (e.key === 'Enter' && t instanceof HTMLElement && t.closest('button')) return;
-  if (e.key === 'Escape' || e.key === 'Enter') emit('close');
-}
-
-function syncBodyScroll(open: boolean) {
-  document.body.style.overflow = open ? 'hidden' : '';
-}
-
+// 打开时刷新目标地址；Esc / 焦点陷阱 / 焦点回收 / 滚动锁统一走 useDialog
 watch(
   () => props.open,
-  async (v) => {
-    syncBodyScroll(v);
+  (v) => {
     if (!v) return;
     target.value = shareTarget();
     copied.value = false;
-    await nextTick();
-    dialogEl.value?.focus();
   },
 );
 
-onMounted(() => window.addEventListener('keydown', onKey));
-onBeforeUnmount(() => {
-  window.removeEventListener('keydown', onKey);
-  syncBodyScroll(false);
+useDialog({
+  open: () => props.open,
+  close: () => emit('close'),
+  root: dialogEl,
+  onKey: (e) => {
+    // 焦点在按钮上时 Enter 会合成 click，别再处理一次
+    if (e.key !== 'Enter') return false;
+    if (e.target instanceof HTMLElement && e.target.closest('button')) return true;
+    emit('close');
+    return true;
+  },
 });
 
 async function doCopy() {

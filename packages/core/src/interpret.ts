@@ -13,7 +13,7 @@
  * 本文件为平台无关纯函数：无 DOM / 框架 / 第三方依赖。
  * ============================================================ */
 
-import { ELEMENT_CN, type Trigram, trigram } from '@plumora/knowledge';
+import { ELEMENT_CN, type Trigram, trigram } from '@plumora/knowledge/trigrams';
 import {
   RELATION_CN,
   type FortuneDegree,
@@ -193,7 +193,8 @@ function verdictOf(r: ResolvedHexagram, question: string): string {
     ? `你问的是「${question.trim()}」。从这一卦来看：`
     : '这次没有记下具体问的是什么事，先就整卦泛泛地看：';
   const base = `本卦是${r.ben.name}。其中"体卦"代表你自己，是${ti.name}，五行属${ELEMENT_CN[j.tiElement]}；"用卦"代表你问的这件事，是${yong.name}，五行属${ELEMENT_CN[j.yongElement]}。两者放在一起看，${j.summary}。`;
-  return lead + base + trendSentenceOf(r);
+  const chain = `这一卦的本、互、变三看：本卦「${r.ben.name}」是开端，互卦「${r.hu.name}」是中间过程，变卦「${r.bian.name}」是最终结局——三卦连起来看，整件事有头有尾。`;
+  return lead + base + chain + trendSentenceOf(r);
 }
 
 /** 由本 / 互 / 变三卦生克合成走势断语 */
@@ -237,9 +238,20 @@ const OUTCOME_NOTE: Readonly<Record<Relation, string>> = Object.freeze({
   YONG_KE_TI: '结局受制于人，宜早做退一步的打算。',
 });
 
+/** 动爻所在爻位的传统象征（自下而上：初 → 上） */
+const LINE_POSITION: Readonly<Record<number, string>> = Object.freeze({
+  1: '初爻主根基、起步，多关乎身边小事与事情的开端',
+  2: '二爻主家门、内部，多关乎亲近之人与近处',
+  3: '三爻主门户、功名，多关乎出外与进取之初',
+  4: '四爻主近君、外任，多关乎外务与宾客',
+  5: '五爻居君位，多关乎尊长、关键决策与大事',
+  6: '上爻主终极、退守，多关乎结局与收尾',
+});
+
 function outcomeOf(r: ResolvedHexagram): string {
   const bj = r.bianJudge;
-  return `动的那一爻是${r.movingLineName}，它一变，本卦就变成了${r.bian.name}。从体用上看是${RELATION_CN[bj.relation]}：${bj.traditional}。${OUTCOME_NOTE[bj.relation]}`;
+  const pos = LINE_POSITION[r.moving] ?? '';
+  return `动的那一爻是${r.movingLineName}，它一变，本卦就变成了${r.bian.name}。从体用上看是${RELATION_CN[bj.relation]}：${bj.traditional}。${OUTCOME_NOTE[bj.relation]}（${pos}。）`;
 }
 
 /** 各类象栏目取首词（类象为顿号分隔的短语串） */
@@ -276,24 +288,34 @@ function imageryOf(r: ResolvedHexagram, domain: QuestionDomain): string {
   return IMAGERY_NOTE[domain](ti, yong);
 }
 
+/** 动爻爻位 → 应期远近与时间单位（梅花易数：初爻近、上爻远） */
+function timingSpanOf(moving: number): { span: string; unit: string } {
+  if (moving <= 2) return { span: '近', unit: '日' };
+  if (moving <= 4) return { span: '中', unit: '个月' };
+  return { span: '远', unit: '年' };
+}
+
 function timingOf(r: ResolvedHexagram): string {
   const ti = trigram(r.ti);
   const yong = trigram(r.yong);
   const base = `按五行时令推算：${ti.name}属${ELEMENT_CN[ti.element]}，在${ti.season}当令；${yong.name}属${ELEMENT_CN[yong.element]}，在${yong.season}当令。`;
+  const { span, unit } = timingSpanOf(r.moving);
+  const sum = ti.number + yong.number;
+  const spanNote = `动爻在第${r.moving}爻，应期偏${span}，以先天卦数论（${ti.name}数${ti.number}、${yong.name}数${yong.number}，相合为${sum}），约在 ${sum} ${unit} 上下可见分晓；${ti.season}、${yong.season}等当令时令前后更验。`;
   const rel = r.judge.relation;
+  let relNote: string;
   if (rel === 'YONG_KE_TI') {
-    return `${base}用克体，要留神的时间是用卦当令的日子（${yong.season}），那时候容易出状况，凡事缓一缓。`;
+    relNote = `用克体，要留神的时间是用卦当令的日子（${yong.season}），那时候容易出状况，凡事缓一缓。`;
+  } else if (rel === 'TI_KE_YONG') {
+    relNote = `体克用，事情有结果，多半在你自己当令的日子（${ti.season}）。`;
+  } else if (rel === 'YONG_SHENG_TI') {
+    relNote = `用生体，贵人来助，多在用卦当令的前后（${yong.season}）。`;
+  } else if (rel === 'TI_SHENG_YONG') {
+    relNote = `体生用，你多付出的阶段在用卦当令的前后（${yong.season}），早作准备。`;
+  } else {
+    relNote = `体用比和，两个卦共同当令的月份最顺，没什么大阻碍。`;
   }
-  if (rel === 'TI_KE_YONG') {
-    return `${base}体克用，事情有结果，多半在你自己当令的日子（${ti.season}）。`;
-  }
-  if (rel === 'YONG_SHENG_TI') {
-    return `${base}用生体，贵人来助，多在用卦当令的前后（${yong.season}）。`;
-  }
-  if (rel === 'TI_SHENG_YONG') {
-    return `${base}体生用，你多付出的阶段在用卦当令的前后（${yong.season}），早作准备。`;
-  }
-  return `${base}体用比和，两个卦共同当令的月份最顺，没什么大阻碍。`;
+  return `${base}${spanNote}${relNote}`;
 }
 
 /** 剥离开头「名称：」前缀（数据层爻辞释义以爻名开头） */

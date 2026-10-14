@@ -8,25 +8,25 @@
 .glyph {
   display: inline-flex;
   flex-direction: column;
-  gap: 7px;
-  --bar-w: 52px;
-  --bar-h: 7px;
-  --yin-w: 23px;
-  --gap: 6px;
+  gap: calc(7px * var(--font-scale));
+  --bar-w: calc(52px * var(--font-scale));
+  --bar-h: calc(7px * var(--font-scale));
+  --yin-w: calc(23px * var(--font-scale));
+  --gap: calc(6px * var(--font-scale));
 }
 
 .glyph.sm {
-  gap: 4px;
-  --bar-w: 40px;
-  --bar-h: 4px;
-  --yin-w: 17px;
-  --gap: 5px;
+  gap: calc(4px * var(--font-scale));
+  --bar-w: calc(40px * var(--font-scale));
+  --bar-h: calc(4px * var(--font-scale));
+  --yin-w: calc(17px * var(--font-scale));
+  --gap: calc(5px * var(--font-scale));
 }
 
 .glyph.lg {
-  --bar-w: 64px;
-  --bar-h: 8px;
-  --yin-w: 29px;
+  --bar-w: calc(64px * var(--font-scale));
+  --bar-h: calc(8px * var(--font-scale));
+  --yin-w: calc(29px * var(--font-scale));
 }
 
 .glyph .yao {
@@ -40,7 +40,7 @@
   display: block;
   width: var(--bar-w);
   height: var(--bar-h);
-  border-radius: 3px;
+  border-radius: calc(3px * var(--font-scale));
   background: var(--c-ink);
 }
 
@@ -55,10 +55,10 @@
 /* 动爻实心圆点（朱砂红），位于该爻右侧 */
 .glyph .dot {
   position: absolute;
-  right: -16px;
+  right: calc(-16px * var(--font-scale));
   top: 50%;
-  width: 8px;
-  height: 8px;
+  width: calc(8px * var(--font-scale));
+  height: calc(8px * var(--font-scale));
   border-radius: 50%;
   background: var(--c-accent);
   transform: translateY(-50%);

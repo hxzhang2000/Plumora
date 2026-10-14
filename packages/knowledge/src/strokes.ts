@@ -176,7 +176,6 @@ export function lookupStrokes(
   return { strokes: entry.s, manual: false, fellBackToSimplified: false, resolvedChar: key };
 }
 
-/** 是否为汉字（CJK 统一表意文字基本区 + 扩展 A） */
-export function isHanChar(ch: string): boolean {
-  return /^[\u3400-\u4DBF\u4E00-\u9FFF]$/.test(ch);
-}
+/** 是否为汉字（CJK 统一表意文字基本区 + 扩展 A）。
+ *  定义已迁到 han.ts（零数据模块），此处仅作转出，保持既有导入路径不变。 */
+export { isHanChar } from './han.js';

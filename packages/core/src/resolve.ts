@@ -3,15 +3,13 @@
  * ============================================================ */
 
 import {
-  type Hexagram,
-  type TrigramNumber,
-  binaryToLines,
-  getHexagram,
   linesToBinary,
   trigram,
   trigramByBinary,
   trigramLines,
-} from '@plumora/knowledge';
+  type TrigramNumber,
+} from '@plumora/knowledge/trigrams';
+import { binaryToLines, getHexagram, type Hexagram } from '@plumora/knowledge/hexagrams';
 import { judge } from './judge.js';
 import { lineName } from './line.js';
 import { assertTrigramNumber } from './modulus.js';

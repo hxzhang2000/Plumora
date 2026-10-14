@@ -10,7 +10,18 @@
  *    禁止删库重建（destructive migration）。
  * ============================================================ */
 
-import type { HexagramRecord, NewHexagramRecord, VerifyStatus } from '@plumora/core';
+import {
+  judge,
+  resolve,
+  VERIFY_STATUS_LIST,
+  type CastMethod,
+  type HexagramRecord,
+  type NewHexagramRecord,
+  type TiYongRule,
+  type VerifyStatus,
+} from '@plumora/core';
+import { trigram, type TrigramNumber } from '@plumora/knowledge';
+import { requestPersistentStorage } from '@/platform/storage';
 
 const DB_NAME = 'plumora';
 const DB_VERSION = 1;
@@ -74,6 +85,8 @@ function run<T>(
 /** 新增一条记录，返回分配到的 id */
 export async function insertRecord(rec: NewHexagramRecord): Promise<number> {
   const key = await run<IDBValidKey>('readwrite', (s) => s.add(rec));
+  // 用户刚明确保存了一条卦例 —— 此刻申请持久存储通过率最高（理由见 platform/storage.ts）
+  void requestPersistentStorage();
   return Number(key);
 }
 
@@ -83,6 +96,57 @@ export async function updateRecord(rec: HexagramRecord): Promise<void> {
 
 export async function deleteRecord(id: number): Promise<void> {
   await run('readwrite', (s) => s.delete(id));
+}
+
+/**
+ * 批量写入（导入用）——单事务，全部成功或全部回滚。
+ *
+ * 为什么不用循环调 insertRecord：那样每条一个事务，中途失败会留下「导入了一半」
+ * 的半吊子状态，且用户无法判断该不该重试。这里用一个 readwrite 事务，
+ * 任一条 add 出错即 abort，库回到导入前状态。
+ *
+ * @param replace true = 覆盖模式（先清空再写入）；false = 合并模式（追加）
+ * @returns 实际写入条数
+ */
+export async function insertRecords(
+  records: readonly NewHexagramRecord[],
+  replace = false,
+): Promise<number> {
+  if (!records.length) return 0;
+  const db = await openDatabase();
+  return new Promise<number>((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readwrite');
+    const store = tx.objectStore(STORE);
+    if (replace) store.clear();
+    for (const rec of records) store.add(rec);
+    tx.oncomplete = () => {
+      // 导入同样是一次明确的「我要长期留着这些卦例」的表态
+      void requestPersistentStorage();
+      resolve(records.length);
+    };
+    tx.onerror = () => reject(tx.error ?? new Error('IndexedDB 批量写入失败'));
+    tx.onabort = () => reject(tx.error ?? new Error('IndexedDB 批量写入被中止'));
+  });
+}
+
+/**
+ * 原样回写（**保留 id**）——用于「撤销删除 / 撤销清空」。
+ *
+ * 与 insertRecords 的区别：用 put 而非 add，因此原主键被保留。
+ * 撤销的意义就在于「当作没发生过」——若换了新 id，用户之前打开的详情链接、
+ * 以及刚吞下「已删除」的那条记录会对不上号。单事务，全成或全回滚。
+ */
+export async function restoreRecords(records: readonly HexagramRecord[]): Promise<number> {
+  if (!records.length) return 0;
+  const db = await openDatabase();
+  return new Promise<number>((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readwrite');
+    const store = tx.objectStore(STORE);
+    for (const rec of records) store.put(rec);
+    tx.oncomplete = () => resolve(records.length);
+    tx.onerror = () => reject(tx.error ?? new Error('IndexedDB 回写失败'));
+    tx.onabort = () => reject(tx.error ?? new Error('IndexedDB 回写被中止'));
+  });
 }
 
 export async function clearRecords(): Promise<void> {
@@ -158,6 +222,132 @@ export function toExportBundle(records: readonly HexagramRecord[]): ExportBundle
     app: '观梅 · Plumora',
     records: [...records].sort((a, b) => a.createdAt - b.createdAt),
   };
+}
+
+/* ---------- 导入（导出文件的反向还原，FR-08 补全） ---------- */
+
+/** 导入结果：成功条数 + 逐条丢弃原因（供 UI 给出可读反馈） */
+export interface ImportOutcome {
+  /** 通过校验、已归一化、可落库的记录（id 由存储层重新分配） */
+  readonly accepted: NewHexagramRecord[];
+  /** 因字段非法而丢弃的记录：第 n 条（1 起）+ 原因 */
+  readonly rejected: { readonly index: number; readonly reason: string }[];
+}
+
+/** 导入失败（文件级错误，非单条记录问题）时抛出 */
+export class ImportError extends Error {}
+
+const isObj = (v: unknown): v is Record<string, unknown> =>
+  typeof v === 'object' && v !== null && !Array.isArray(v);
+
+/** 1–8 的整数先天数；非法返回 null */
+function asTrigramNo(v: unknown): TrigramNumber | null {
+  return Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 8
+    ? (v as TrigramNumber)
+    : null;
+}
+
+/** 有限数字（epoch millis），非法返回 null */
+function asMillis(v: unknown): number | null {
+  return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null;
+}
+
+function asNullableText(v: unknown): string | null {
+  if (typeof v !== 'string') return null;
+  const t = v.trim();
+  return t ? t : null;
+}
+
+const VALID_RULES: readonly TiYongRule[] = ['MOVING_LINE', 'UPPER_YONG_LOWER_TI'];
+
+/**
+ * 解析导出文件 → 可落库记录。
+ *
+ * 设计取舍：
+ *   - **结构错误整包拒绝**（抛 {@link ImportError}）：schemaVersion 不符、records 不是数组，
+ *     说明文件根本不是本应用的导出物，逐条容错只会把半个错文件写进库。
+ *   - **单条错误逐条丢弃**（记入 rejected）：一条记录脏了不该连累其余 99 条。
+ *   - **派生字段全部重算**：只信任四要素（upper/lower/moving/tiYongRule）+ 体用 + 时间等；
+ *     `benGuaCode`/`benGuaName`/`huGuaCode`/`bianGuaCode`/`relation` 一律用知识库重推，
+ *     避免手工改过的旧文件把与卦体不符的冗余列带进库。
+ *   - **体用**：优先用落库的 tiTrigram/yongTrigram（历史口径的凭据，replayRecord 亦以此为准），
+ *     缺失或非法时回退到按 tiYongRule 现推，保证导入后必定自洽。
+ */
+export function parseExportBundle(input: unknown): ImportOutcome {
+  if (!isObj(input)) throw new ImportError('文件内容不是 JSON 对象');
+  if (input.schemaVersion !== 1) {
+    throw new ImportError(`不支持的 schemaVersion：${String(input.schemaVersion ?? '（缺失）')}`);
+  }
+  if (!Array.isArray(input.records)) throw new ImportError('records 字段缺失或不是数组');
+
+  const accepted: NewHexagramRecord[] = [];
+  const rejected: { index: number; reason: string }[] = [];
+
+  input.records.forEach((raw, i) => {
+    const index = i + 1;
+    if (!isObj(raw)) {
+      rejected.push({ index, reason: '不是对象' });
+      return;
+    }
+
+    const upper = asTrigramNo(raw.upperTrigram);
+    const lower = asTrigramNo(raw.lowerTrigram);
+    const moving = Number.isInteger(raw.movingLine) && (raw.movingLine as number) >= 1 && (raw.movingLine as number) <= 6
+      ? (raw.movingLine as number)
+      : null;
+    if (upper === null || lower === null || moving === null) {
+      rejected.push({ index, reason: '上卦 / 下卦 / 动爻非法' });
+      return;
+    }
+
+    const rule: TiYongRule = VALID_RULES.includes(raw.tiYongRule as TiYongRule)
+      ? (raw.tiYongRule as TiYongRule)
+      : 'MOVING_LINE';
+
+    // 以上下卦 + 动爻重推本 · 互 · 变与体用关系，杜绝文件里的冗余列与卦体打架
+    const resolved = resolve(upper, lower, moving, rule);
+
+    const tiRaw = asTrigramNo(raw.tiTrigram);
+    const yongRaw = asTrigramNo(raw.yongTrigram);
+    const ti = tiRaw ?? resolved.ti;
+    const yong = yongRaw ?? resolved.yong;
+
+    const createdAt = asMillis(raw.createdAt) ?? Date.now();
+    const updatedAt = asMillis(raw.updatedAt) ?? createdAt;
+
+    const verifyStatus: VerifyStatus = VERIFY_STATUS_LIST.includes(raw.verifyStatus as VerifyStatus)
+      ? (raw.verifyStatus as VerifyStatus)
+      : 'UNVERIFIED';
+
+    const question = asNullableText(raw.question);
+    // 所问之事 ≤200 字（04 §2.2），超长截断而非丢弃
+    const questionClipped = question && question.length > 200 ? question.slice(0, 200) : question;
+
+    accepted.push({
+      createdAt,
+      updatedAt,
+      method: (typeof raw.method === 'string' ? raw.method : 'TIME') as CastMethod,
+      // inputParams 原样保留（复现起卦上下文用，结构由 core 定义，导入侧不做语义校验）
+      inputParams: typeof raw.inputParams === 'string' ? raw.inputParams : '{}',
+      lunarLabel: typeof raw.lunarLabel === 'string' && raw.lunarLabel.trim() ? raw.lunarLabel : '—',
+      upperTrigram: upper,
+      lowerTrigram: lower,
+      movingLine: moving,
+      benGuaCode: resolved.ben.code,
+      benGuaName: resolved.ben.name,
+      huGuaCode: resolved.hu.code,
+      bianGuaCode: resolved.bian.code,
+      tiTrigram: ti,
+      yongTrigram: yong,
+      tiYongRule: rule,
+      relation: judge(trigram(ti), trigram(yong)).relation,
+      question: questionClipped,
+      note: asNullableText(raw.note),
+      verifyStatus,
+    });
+  });
+
+  return { accepted, rejected };
 }
 
 const CSV_HEADER = [

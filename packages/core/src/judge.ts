@@ -5,7 +5,7 @@
  *   用生体 → 大吉；体克用 → 小吉；体用比和 → 吉；体生用 → 小凶；用克体 → 大凶
  * ============================================================ */
 
-import { ELEMENT_CN, type Element, type Trigram } from '@plumora/knowledge';
+import { ELEMENT_CN, type Element, type Trigram } from '@plumora/knowledge/trigrams';
 import {
   DEGREE_CN,
   RELATION_CN,

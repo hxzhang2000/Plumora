@@ -7,6 +7,7 @@
  * ============================================================ */
 
 import { computed, readonly, ref } from 'vue';
+import { SHARE_PARAM } from '@/platform/shareLink';
 
 export type RouteName = 'cast' | 'result' | 'records' | 'record-detail' | 'learn' | 'shi-yi';
 
@@ -18,18 +19,57 @@ export interface Route {
 
 const DEFAULT_ROUTE: Route = { name: 'cast', params: {}, path: '/cast' };
 
+/** 解码失败（截断的 `%` 序列）不该让整条路由解析崩掉，原样返回即可 */
+function safeDecode(v: string): string {
+  try {
+    return decodeURIComponent(v);
+  } catch {
+    return v;
+  }
+}
+
+/** 解析 `#/list?a=1&b=2` 的查询串（不入 params，按需取用） */
+function queryOf(raw: string): Record<string, string> {
+  const q = raw.split('?')[1];
+  if (!q) return {};
+  const out: Record<string, string> = {};
+  for (const pair of q.split('&')) {
+    if (!pair) continue;
+    const eq = pair.indexOf('=');
+    const key = safeDecode(eq < 0 ? pair : pair.slice(0, eq));
+    out[key] = safeDecode(eq < 0 ? '' : pair.slice(eq + 1));
+  }
+  return out;
+}
+
 function parse(hash: string): Route {
-  const path = (hash.replace(/^#/, '') || '/').split('?')[0];
+  const raw = hash.replace(/^#/, '') || '/';
+  const path = raw.split('?')[0] ?? '/';
   const seg = path.split('/').filter(Boolean);
   if (seg.length === 0) return DEFAULT_ROUTE;
 
   switch (seg[0]) {
     case 'cast':
       return { name: 'cast', params: {}, path: '/cast' };
-    case 'result':
-      return { name: 'result', params: {}, path: '/result' };
-    case 'learn':
-      return { name: 'learn', params: {}, path: '/learn' };
+    case 'result': {
+      /* 结果页允许带一个分享参数（`#/result?c=…`，见 platform/shareLink）。
+       * 它不进 path —— normalizeHash 只比 path 段，否则会被当成未知地址改写掉。 */
+      const shared = queryOf(raw)[SHARE_PARAM];
+      return shared
+        ? { name: 'result', params: { [SHARE_PARAM]: shared }, path: '/result' }
+        : { name: 'result', params: {}, path: '/result' };
+    }
+    case 'learn': {
+      /* 学习页带一个可选的 tab 定位参数（`#/learn?tab=shiYI`）：从十翼阅读器
+       * 返回时要落回「十翼」板块，而不是默认板块（ShiYiPanel.backToOverview
+       * 与下面的 PARENT_PATH 都会发它）。
+       * 与 result 同理：它不进 path —— normalizeHash 只比 path 段，
+       * 否则带参数的地址会被当成未知地址改写掉。 */
+      const tab = queryOf(raw).tab;
+      return tab
+        ? { name: 'learn', params: { tab }, path: '/learn' }
+        : { name: 'learn', params: {}, path: '/learn' };
+    }
     case 'shi-yi':
       return seg[1]
         ? { name: 'shi-yi', params: { slug: seg[1] }, path: `/shi-yi/${seg[1]}` }

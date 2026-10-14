@@ -49,6 +49,25 @@ function ok(req, value, scheduler = defaultScheduler) {
   });
 }
 
+/**
+ * 带事务跟踪的成功回调：除派发 req.onsuccess 外，还递减所属事务的待决计数，
+ * 归零时派发 tx.oncomplete（批量导入 insertRecords 依赖它判断事务结束）。
+ *
+ * 事务完成也**异步**派发（见文件头 ①）：调用方是
+ * `const tx = db.transaction(...); store.add(...); tx.oncomplete = ...` ——
+ * 先发请求、后挂回调，同步 fire 会把 oncomplete 丢在赋值之前。
+ */
+function okTracked(req, value, tx, scheduler) {
+  req.result = value;
+  scheduler(() => {
+    if (typeof req.onsuccess === 'function') req.onsuccess({ target: req });
+    if (tx) {
+      tx._pending -= 1;
+      tx._maybeComplete();
+    }
+  });
+}
+
 function fail(req, message, scheduler = defaultScheduler) {
   req.error = new Error(message);
   scheduler(() => {
@@ -82,8 +101,14 @@ function installIndexedDB(target, opts = {}) {
     return stores.get(name);
   }
 
-  function makeStore(name) {
+  function makeStore(name, tx) {
     const rows = getStore(name);
+    /** 写 / 读请求的统一出口：登记待决计数，回调里再递减并判定事务完成 */
+    const tracked = (req, value) => {
+      if (tx) tx._pending += 1;
+      okTracked(req, value, tx, scheduler);
+      return req;
+    };
     return {
       keyPath,
       autoIncrement,
@@ -95,8 +120,7 @@ function installIndexedDB(target, opts = {}) {
         const id = autoIncrement ? nextId++ : rec[keyPath];
         if (autoIncrement) rec[keyPath] = id;
         if (!SELFTEST_SKIP_WRITE) rows.set(id, rec);
-        ok(req, id, scheduler);
-        return req;
+        return tracked(req, id);
       },
       put(rec) {
         const req = makeRequest();
@@ -104,37 +128,56 @@ function installIndexedDB(target, opts = {}) {
         // 当前保存走 add()，故自检有效；但将来保存若改走 put()，
         // 漏掉这一处会让 IDB_STUB_SELFTEST=1 显示 PASS 却什么也没验证。
         if (!SELFTEST_SKIP_WRITE) rows.set(rec[keyPath], rec);
-        ok(req, rec[keyPath], scheduler);
-        return req;
+        return tracked(req, rec[keyPath]);
       },
       get(id) {
-        const req = makeRequest();
-        ok(req, rows.get(id), scheduler);
-        return req;
+        return tracked(makeRequest(), rows.get(id));
       },
       getAll() {
-        const req = makeRequest();
-        ok(req, [...rows.values()], scheduler);
-        return req;
+        return tracked(makeRequest(), [...rows.values()]);
       },
       delete(id) {
-        const req = makeRequest();
         rows.delete(id);
-        ok(req, undefined, scheduler);
-        return req;
+        return tracked(makeRequest(), undefined);
       },
       clear() {
-        const req = makeRequest();
         rows.clear();
-        ok(req, undefined, scheduler);
-        return req;
+        return tracked(makeRequest(), undefined);
       },
       count() {
-        const req = makeRequest();
-        ok(req, rows.size, scheduler);
-        return req;
+        return tracked(makeRequest(), rows.size);
       },
     };
+  }
+
+  /**
+   * 事务对象：跟踪本事务内的待决请求，全部完成（且期间未新发）后派发 oncomplete。
+   *
+   * 为什么需要：platform/records.ts 的 `insertRecords`（批量导入）在一个
+   * readwrite 事务里连发「clear + N × add」，靠 `tx.oncomplete` 判定成功并
+   * resolve。原替身直接返回 `{ objectStore: () => makeStore(n) }`、从不派发
+   * 事务事件，导入用例会永远挂起。这里补齐该子集（oncomplete / onerror / onabort）。
+   */
+  function makeTransaction(name) {
+    const tx = {
+      _pending: 0,
+      _completed: false,
+      oncomplete: null,
+      onerror: null,
+      onabort: null,
+      error: null,
+      objectStore() {
+        return makeStore(name, tx);
+      },
+      _maybeComplete() {
+        if (this._completed || this._pending > 0) return;
+        this._completed = true;
+        scheduler(() => {
+          if (typeof this.oncomplete === 'function') this.oncomplete({ target: this });
+        });
+      },
+    };
+    return tx;
   }
 
   target.indexedDB = {
@@ -146,7 +189,7 @@ function installIndexedDB(target, opts = {}) {
       const db = {
         objectStoreNames: storeNames,
         createObjectStore: (n) => makeStore(n),
-        transaction: (n) => ({ objectStore: () => makeStore(n) }),
+        transaction: (n) => makeTransaction(n),
       };
       req.result = db;
       // 首次打开 → version 0 → 1，必然触发 upgradeneeded（与浏览器一致）

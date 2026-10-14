@@ -6,7 +6,14 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
+      "@plumora/core/resolve": ["../../packages/core/src/resolve.ts"],
       "@plumora/core": ["../../packages/core/src/index.ts"],
+      "@plumora/knowledge/trigrams": ["../../packages/knowledge/src/trigrams.ts"],
+      "@plumora/knowledge/hexagrams": ["../../packages/knowledge/src/hexagrams.ts"],
+      "@plumora/knowledge/bilingual": ["../../packages/knowledge/src/bilingual.ts"],
+      "@plumora/knowledge/shiYi": ["../../packages/knowledge/src/shiYi.ts"],
+      "@plumora/knowledge/han": ["../../packages/knowledge/src/han.ts"],
+      "@plumora/knowledge/strokes": ["../../packages/knowledge/src/strokes.ts"],
       "@plumora/knowledge": ["../../packages/knowledge/src/index.ts"],
       "@plumora/lunar": ["../../packages/lunar/src/index.ts"]
     }

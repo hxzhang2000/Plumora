@@ -87,6 +87,27 @@ describe('interpret 结构完整性', () => {
     const out = interpret(r, '今年的财运怎么样');
     expect(out.sections[0].body).toContain('今年的财运怎么样');
   });
+
+  it('三审串联：总断点出本→互→变三卦', () => {
+    const r = make(5, 4, 4);
+    const out = interpret(r, '今年的财运怎么样');
+    expect(out.sections[0].body).toContain('本卦');
+    expect(out.sections[0].body).toContain('互卦');
+    expect(out.sections[0].body).toContain('变卦');
+  });
+
+  it('应期精算：含先天卦数与动爻远近', () => {
+    const r = make(5, 4, 4);
+    const out = interpret(r, '今年的财运怎么样');
+    expect(out.sections[4].body).toContain('先天卦数');
+    expect(out.sections[4].body).toContain('应期偏');
+  });
+
+  it('动爻爻位象征：五爻点出君位', () => {
+    const r = make(5, 4, 5); // 动在五爻
+    const out = interpret(r, '事业如何');
+    expect(out.sections[2].body).toContain('君位');
+  });
 });
 
 describe('interpret 最终答案', () => {

@@ -10,7 +10,7 @@
  *   故本实现增加该字段，并同步登记到 04 文档 §2.2。
  * ============================================================ */
 
-import { trigram } from '@plumora/knowledge';
+import { trigram } from '@plumora/knowledge/trigrams';
 import { judge } from './judge.js';
 import { assertTrigramNumber } from './modulus.js';
 import { resolve } from './resolve.js';

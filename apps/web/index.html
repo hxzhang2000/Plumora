@@ -9,6 +9,13 @@
        写成朱砂色会让首屏浏览器 UI 颜色跳变一次（审查 W-11）。 -->
   <meta name="theme-color" content="#FAF7F0" />
   <title>观梅 · Plumora</title>
+  <!-- 分享预览（og / twitter）由构建期注入：见 vite.config.ts 的 appVersionPlugin。
+       写死在这里的话，og:image 只能是相对路径，多数爬虫（微信 / Facebook）不认；
+       构建时期按部署域名补成绝对地址。 -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="观梅 · Plumora" />
+  <meta property="og:locale" content="zh_CN" />
+  <meta name="twitter:card" content="summary" />
   <!-- 图标：印章形态的竖排篆书「观梅」（见 src/App.vue 的 brandMark 说明）。
        带 / 的路径由 Vite 按 base: './' 重写成相对路径，故可部署到任意子目录。 -->
   <link rel="icon" type="image/svg+xml" href="/icon.svg" />

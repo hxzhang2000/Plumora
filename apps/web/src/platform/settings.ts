@@ -3,7 +3,13 @@
  * Web 端以 localStorage 承载（单机、无云同步，与 NFR-03 一致）
  * ============================================================ */
 
-import { METHOD_CN, type CastMethod, type TiYongRule } from '@plumora/core';
+import {
+  METHOD_CN,
+  TIME_PRECISION_CN,
+  type CastMethod,
+  type TiYongRule,
+  type TimePrecision,
+} from '@plumora/core';
 import type { StrokeStandard } from '@plumora/knowledge';
 
 export type ThemeMode = 'LIGHT' | 'DARK' | 'SYSTEM';
@@ -82,10 +88,28 @@ export interface Settings {
   tiYongRule: TiYongRule;
   /** 主题 */
   theme: ThemeMode;
-  /** 保留记录上限：0 = 不限制 */
+  /**
+   * 保留记录上限：0 = 不限制。
+   *
+   * ⚠️ 默认保持 0（不限制）而不是收紧成 500：`enforceRecordLimit` 会在下一次
+   * 保存卦例时把超出的记录**直接删掉**，而默认值是「用户从没设置过」的兜底——
+   * 已经攒了上千条的老用户升级后，会在毫无察觉的情况下丢掉一半记录。
+   * 首屏卡顿的真因是列表一次性全量渲染，已由 RecordsView 的增量渲染解决。
+   */
   recordLimit: 0 | 500 | 1000;
+
   /** 首启声明页已确认 */
   disclaimerAcknowledged: boolean;
+  /** 卦名双语显示（拼音 / 英文）—— 仅展示增强，不参与断卦逻辑 */
+  showBilingual: boolean;
+  /** 全局字号缩放系数（设置滑块 0.8–1.5，1 = 默认 100%）—— 仅展示增强 */
+  fontScale: number;
+  /**
+   * 时间起卦精度（03 文档 §6.6）—— 决定动爻是否追加分钟 / 秒参与取余。
+   * 默认 MINUTE：同一时辰内不同分钟可得不同动爻；切 SHICHEN 回到纯传统
+   * 时辰口径（可手算复核）。**只影响动爻，上 / 下卦不受影响。**
+   */
+  timePrecision: TimePrecision;
 }
 
 export const SETTINGS_KEY = 'plumora.settings.v1';
@@ -97,6 +121,9 @@ export const DEFAULT_SETTINGS: Readonly<Settings> = {
   theme: 'SYSTEM',
   recordLimit: 0,
   disclaimerAcknowledged: false,
+  showBilingual: false,
+  fontScale: 1,
+  timePrecision: 'MINUTE',
 };
 
 /**
@@ -110,6 +137,29 @@ export function sanitizeCastMethod(value: unknown): CastMethod {
   return typeof value === 'string' && value in METHOD_CN
     ? (value as CastMethod)
     : DEFAULT_SETTINGS.defaultCastMethod;
+}
+
+/**
+ * 清洗字号缩放系数：限制在 0.8–1.5 之间，越界或非数回退默认 1。
+ * 老用户 localStorage 里没有该键时由 DEFAULT_SETTINGS 兜底。
+ */
+export function clampFontScale(value: unknown): number {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n)) return DEFAULT_SETTINGS.fontScale;
+  return Math.min(1.5, Math.max(0.8, n));
+}
+
+/**
+ * 清洗时间起卦精度（03 文档 §6.6）。
+ *
+ * 与 `sanitizeCastMethod` 同一理由：口径枚举会随产品决策增减，而 localStorage
+ * 里存的是写入当时的值。脏值 / 未知值回退到默认（MINUTE），而不是抛错或
+ * 让 `castByTime` 拿到一个不认识的 precision 静默按传统口径算。
+ */
+export function sanitizeTimePrecision(value: unknown): TimePrecision {
+  return typeof value === 'string' && value in TIME_PRECISION_CN
+    ? (value as TimePrecision)
+    : DEFAULT_SETTINGS.timePrecision;
 }
 
 /**
@@ -134,6 +184,10 @@ export function loadSettings(): Settings {
       ...(parsed.disclaimerAcknowledged !== undefined && {
         disclaimerAcknowledged: parsed.disclaimerAcknowledged,
       }),
+      ...(parsed.showBilingual !== undefined && { showBilingual: parsed.showBilingual }),
+      ...(parsed.fontScale !== undefined && { fontScale: clampFontScale(parsed.fontScale) }),
+      // 老用户 localStorage 里没有该键 → 走 DEFAULT（MINUTE）
+      timePrecision: sanitizeTimePrecision(parsed.timePrecision),
       defaultCastMethod: sanitizeCastMethod(parsed.defaultCastMethod),
     };
   } catch {
@@ -196,4 +250,18 @@ export function watchViewport(onChange: () => void): () => void {
   const handler = () => onChange();
   mq.addEventListener('change', handler);
   return () => mq.removeEventListener('change', handler);
+}
+
+/* ---------- 字号缩放 ---------- */
+
+/**
+ * 把全局字号缩放系数写入 <html style="--font-scale">。
+ *
+ * 设计令牌 tokens.css 里所有 --fs-* 都用 `calc(基准px * var(--font-scale))` 表达，
+ * 这里只改这一个变量即可整体缩放正文 / 注释 / 标题的字号（06 §4.2 字体令牌）。
+ * 写在内联 style 上（而非 :root）优先级最高、即时生效，且不影响其他主题变量。
+ */
+export function applyFontScale(scale: number): void {
+  if (typeof document === 'undefined') return;
+  document.documentElement.style.setProperty('--font-scale', String(scale));
 }

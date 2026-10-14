@@ -47,6 +47,7 @@ export {
   castByNumber,
   castByCharacter,
   castByRandom,
+  castByDaily,
   inputParamsOf,
   castContext,
   CastInputError,
@@ -70,6 +71,7 @@ export {
   RELATION_CN,
   DEGREE_CN,
   METHOD_CN,
+  TIME_PRECISION_CN,
   methodCn,
 } from './types.js';
 export type {
@@ -87,6 +89,7 @@ export type {
   JudgeResult,
   ResolvedHexagram,
   TiYongRule,
+  TimePrecision,
   Relation,
   FortuneDegree,
 } from './types.js';

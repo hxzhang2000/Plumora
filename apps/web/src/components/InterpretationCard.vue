@@ -2,19 +2,36 @@
 /**
  * 解卦卡 —— 结合卦象与所问之事，给出传统断法参考（interpret 引擎的 UI 呈现）
  *
- * 位置：ResultPanel 本卦视图内，生克结论卡之后、体用类象之前
- * （2026-10-13 用户要求；仅本卦 tab 展示——解卦基于本卦体用整体断事）。
+ * 位置：ResultPanel 生克结论卡之后、类象之前，本卦 / 互卦 / 变卦三视图均展示
+ * （2026-10-13 起原仅本卦；2026-10-14 用户要求三卦切换都给断语参考）。
+ * 引擎本身已含本·互·变三审叙述，故三视图所见为同一段整体断语。
  * question 变化时实时重算（输入框即改即看）；为空时按综合泛断。
  */
 import { computed } from 'vue';
 import { interpret, type Interpretation, type ResolvedHexagram } from '@plumora/core';
 
-const props = defineProps<{
-  resolved: ResolvedHexagram;
-  question: string;
-}>();
+const props = withDefaults(
+  defineProps<{
+    resolved: ResolvedHexagram;
+    question: string;
+    /** 当前查看的卦视图：本卦不提示；互 / 变视图给一句语境，避免被误读成本卦断语 */
+    view?: 'ben' | 'hu' | 'bian';
+  }>(),
+  { view: 'ben' },
+);
 
 const result = computed<Interpretation>(() => interpret(props.resolved, props.question));
+
+/** 互 / 变视图的语境提示：说明当前在看哪一段、下方断语的归属 */
+const viewHint = computed(() => {
+  if (props.view === 'hu') {
+    return '当前查看：互卦 —— 看事情的中间过程。下方为整体断语，已含本 · 互 · 变三审。';
+  }
+  if (props.view === 'bian') {
+    return '当前查看：变卦 —— 看事情的最终走向。下方为整体断语，已含本 · 互 · 变三审。';
+  }
+  return '';
+});
 </script>
 
 <template>
@@ -22,6 +39,8 @@ const result = computed<Interpretation>(() => interpret(props.resolved, props.qu
     <h3 class="card-title">
       解卦参考<span v-if="result.domain !== 'GENERAL'" class="interp-domain">（按「{{ result.domainCn }}」断）</span>
     </h3>
+
+    <p v-if="viewHint" class="interp-view-hint">{{ viewHint }}</p>
 
     <p class="interp-headline serif">{{ result.headline }}</p>
 
@@ -45,6 +64,16 @@ const result = computed<Interpretation>(() => interpret(props.resolved, props.qu
 </template>
 
 <style scoped>
+.interp-view-hint {
+  margin: 2px 0 12px;
+  padding: 8px 10px;
+  border-radius: var(--r-md);
+  background: var(--c-surface-2);
+  font-size: var(--fs-xs);
+  line-height: 1.7;
+  color: var(--c-muted);
+}
+
 .interp-headline {
   margin: 0 0 12px;
   font-size: var(--fs-lg);

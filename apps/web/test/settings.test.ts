@@ -21,7 +21,7 @@ vi.stubGlobal('localStorage', {
   clear: () => store.clear(),
 });
 
-const { DEFAULT_SETTINGS, SETTINGS_KEY, loadSettings, sanitizeCastMethod } =
+const { DEFAULT_SETTINGS, SETTINGS_KEY, loadSettings, sanitizeCastMethod, sanitizeTimePrecision } =
   await import('@/platform/settings');
 
 function seed(method: string): void {
@@ -73,5 +73,40 @@ describe('设置载入与起卦方式清洗', () => {
     const s = loadSettings();
     expect(s).toEqual(DEFAULT_SETTINGS);
     expect('layoutMode' in s).toBe(false);
+  });
+});
+
+describe('时间起卦精度清洗（03 §6.6）', () => {
+  beforeEach(() => {
+    store.clear();
+  });
+
+  it('无存储 → 默认 MINUTE（同一时辰内不同分钟可得不同动爻）', () => {
+    expect(loadSettings().timePrecision).toBe('MINUTE');
+  });
+
+  it('在册精度原样保留（防止清洗过度收紧）', () => {
+    for (const v of ['SHICHEN', 'MINUTE', 'SECOND'] as const) {
+      store.set(SETTINGS_KEY, JSON.stringify({ ...DEFAULT_SETTINGS, timePrecision: v }));
+      expect(loadSettings().timePrecision).toBe(v);
+    }
+  });
+
+  it('脏值 / 非字符串 / 未知口径一律回落到默认', () => {
+    expect(sanitizeTimePrecision('HOURLY')).toBe('MINUTE');
+    expect(sanitizeTimePrecision('')).toBe('MINUTE');
+    expect(sanitizeTimePrecision(undefined)).toBe('MINUTE');
+    expect(sanitizeTimePrecision(42)).toBe('MINUTE');
+    store.set(SETTINGS_KEY, JSON.stringify({ ...DEFAULT_SETTINGS, timePrecision: 'HOURLY' }));
+    expect(loadSettings().timePrecision).toBe('MINUTE');
+  });
+
+  it('老用户旧配置无该键 → 走默认，不抛错也不静默按传统口径', () => {
+    // 模拟 v0.6.0 时期写入的设置快照（无 timePrecision 键）
+    store.set(
+      SETTINGS_KEY,
+      JSON.stringify({ strokeStandard: 'SIMPLIFIED', defaultCastMethod: 'TIME', tiYongRule: 'MOVING_LINE' }),
+    );
+    expect(loadSettings().timePrecision).toBe('MINUTE');
   });
 });

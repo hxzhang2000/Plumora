@@ -2,6 +2,7 @@
 
 import { reactive, watch } from 'vue';
 import {
+  applyFontScale,
   applyLayout,
   applyTheme,
   loadSettings,
@@ -15,6 +16,7 @@ const state = reactive<Settings>(loadSettings());
 
 applyTheme(state.theme);
 applyLayout();
+applyFontScale(state.fontScale);
 
 // 系统主题变化时，仅在「跟随系统」下重新解析
 watchSystemTheme(() => {
@@ -26,11 +28,12 @@ watchViewport(() => {
   applyLayout();
 });
 
-// 任何字段变更 → 落盘 + 应用主题 + 应用布局
+// 任何字段变更 → 落盘 + 应用主题 + 应用布局 + 应用字号缩放
 watch(state, () => {
   saveSettings({ ...state });
   applyTheme(state.theme);
   applyLayout();
+  applyFontScale(state.fontScale);
 });
 
 export function useSettings(): Settings {

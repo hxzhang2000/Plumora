@@ -1,13 +1,22 @@
 {
   "name": "@plumora/knowledge",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "type": "module",
   "description": "观梅 · Plumora 卦象知识库（八卦类象 / 六十四卦 / 笔画映射）——平台无关纯数据，零依赖",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
+  "//sideEffects": "纯数据 + 纯函数，无模块级副作用；声明后打包器可安全摇掉未用到的子表（如汉字笔画表 88KB 只在汉字起卦时才需要）",
+  "sideEffects": false,
+  "//exports": "除裸包名（轻量聚合层）外，重数据各有独立子路径入口。原因是打包器无法跨入口摇树：只要有一个模块 import 了裸包名，笔画表(88KB gzip)/六十四卦全表等就会被整体拖进那个 chunk。要按需加载就只能分开 import。",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./trigrams": "./src/trigrams.ts",
+    "./hexagrams": "./src/hexagrams.ts",
+    "./bilingual": "./src/bilingual.ts",
+    "./han": "./src/han.ts",
+    "./strokes": "./src/strokes.ts",
+    "./shiYi": "./src/shiYi.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",

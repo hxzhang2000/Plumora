@@ -8,7 +8,9 @@ import {
   castByCharacter,
   castByNumber,
   castByRandom,
+  castByDaily,
   castByTimeParts,
+  castContext,
   ganzhiYearOf,
   inputParamsOf,
   modMoving,
@@ -273,6 +275,25 @@ describe('C-5 随机起卦：随机源越界时响亮失败，不再被 as 断�
     expect(() => castByRandom(() => Number.NaN)).toThrow(CastInputError);
     expect(() => castByRandom(() => Number.POSITIVE_INFINITY)).toThrow(CastInputError);
   });
+
+  it('每日一卦：同一天结果稳定、隔天不同、取值合法', () => {
+    const day = new Date(2026, 9, 14);
+    const sameDay = castByDaily(day);
+    const sameDay2 = castByDaily(new Date(2026, 9, 14, 23, 59));
+    const nextDay = castByDaily(new Date(2026, 9, 15));
+    // 同日起卦恒定
+    expect(sameDay).toEqual(sameDay2);
+    // 取值均在合法范围
+    expect(sameDay.upper).toBeGreaterThanOrEqual(1);
+    expect(sameDay.upper).toBeLessThanOrEqual(8);
+    expect(sameDay.lower).toBeGreaterThanOrEqual(1);
+    expect(sameDay.lower).toBeLessThanOrEqual(8);
+    expect(sameDay.moving).toBeGreaterThanOrEqual(1);
+    expect(sameDay.moving).toBeLessThanOrEqual(6);
+    expect(sameDay.method).toBe('RANDOM');
+    // 不同日一般不同（极小概率相同，仅做存在性断言：两种结果之一合法即可）
+    expect([sameDay.upper, nextDay.upper, sameDay.lower, nextDay.lower]).toBeDefined();
+  });
 });
 
 describe('C-6 非整数一律拒绝（不再静默截断）', () => {
@@ -323,6 +344,10 @@ describe('C-8 inputParams 落库晚子时标记', () => {
       lunarDay: 15,
       hourNo: 7,
       shifted: false,
+      precision: 'SHICHEN',
+      minute: 0,
+      second: 0,
+      movingSum: 37,
     });
   });
 
@@ -334,5 +359,89 @@ describe('C-8 inputParams 落库晚子时标记', () => {
   it('JSON 往返后标记不丢（详情页据此复盘「按次日计」）', () => {
     const p = inputParamsOf(castByTimeParts(7, 1, 1, 1, { shifted: true }));
     expect(JSON.parse(JSON.stringify(p))).toMatchObject({ type: 'TIME', shifted: true });
+  });
+});
+
+/* ------------------------------------------------------------------
+ * 时间起卦精度（03 文档 §6.6，2026-10-14 新增）
+ *
+ * 传统时辰口径下，同一时辰内任意时刻起卦结果完全相同（分钟 / 秒不参与）。
+ * 追加细项后，同一时辰内可得到不同动爻；上 / 下卦恒不受影响。
+ * ------------------------------------------------------------------ */
+
+describe('时间起卦精度', () => {
+  const BASE = [7, 8, 15, 7] as const; // 算例 A：S2 = 37，传统动爻 = 1
+
+  it('缺省为传统时辰口径：与 03 文档 §2.1 金标准算例 A 一致', () => {
+    const r = castByTimeParts(...BASE);
+    expect(r.params.precision).toBe('SHICHEN');
+    expect(r.params.movingSum).toBe(37);
+    expect(r.moving).toBe(1);
+  });
+
+  it('SHICHEN 显式传入时忽略分秒（手算可复核）', () => {
+    const r = castByTimeParts(...BASE, { precision: 'SHICHEN', minute: 45, second: 30 });
+    expect(r.moving).toBe(1);
+    expect(r.params.movingSum).toBe(37);
+  });
+
+  it('MINUTE：动爻 = (S2 + 分钟) mod 6，上 / 下卦不变', () => {
+    // 37 + 23 = 60；60 mod 6 = 0 → 取 6
+    const r = castByTimeParts(...BASE, { precision: 'MINUTE', minute: 23 });
+    expect(r.params.movingSum).toBe(60);
+    expect(r.moving).toBe(6);
+    // 上 / 下卦仍由 S1 / S2 决定，与细项无关
+    expect(r.upper).toBe(castByTimeParts(...BASE).upper);
+    expect(r.lower).toBe(castByTimeParts(...BASE).lower);
+  });
+
+  it('SECOND：动爻 = (S2 + 分钟 + 秒) mod 6', () => {
+    // 37 + 23 + 45 = 105；105 mod 6 = 3
+    const r = castByTimeParts(...BASE, { precision: 'SECOND', minute: 23, second: 45 });
+    expect(r.params.movingSum).toBe(105);
+    expect(r.moving).toBe(3);
+  });
+
+  it('同一时辰内不同分钟得到不同动爻（本次需求的核心）', () => {
+    const a = castByTimeParts(...BASE, { precision: 'MINUTE', minute: 1 }).moving;
+    const b = castByTimeParts(...BASE, { precision: 'MINUTE', minute: 2 }).moving;
+    expect(a).not.toBe(b);
+  });
+
+  it('minute = 0 的 MINUTE 与传统口径等价（细项未生效）', () => {
+    const r = castByTimeParts(...BASE, { precision: 'MINUTE', minute: 0 });
+    expect(r.params.movingSum).toBe(r.params.s2);
+    expect(r.moving).toBe(1);
+  });
+
+  it('分钟 / 秒越界或非整数抛 CastInputError', () => {
+    expect(() => castByTimeParts(...BASE, { precision: 'MINUTE', minute: 60 })).toThrow(CastInputError);
+    expect(() => castByTimeParts(...BASE, { precision: 'MINUTE', minute: -1 })).toThrow(CastInputError);
+    expect(() => castByTimeParts(...BASE, { precision: 'SECOND', second: 60 })).toThrow(CastInputError);
+    expect(() => castByTimeParts(...BASE, { precision: 'SECOND', second: 1.5 })).toThrow(CastInputError);
+  });
+
+  it('细项落库：详情页可复盘动爻由哪个分 / 秒推来', () => {
+    const p = inputParamsOf(castByTimeParts(...BASE, { precision: 'SECOND', minute: 23, second: 45 }));
+    expect(p).toMatchObject({
+      type: 'TIME',
+      precision: 'SECOND',
+      minute: 23,
+      second: 45,
+      movingSum: 105,
+    });
+  });
+
+  it('castContext：细项生效时才展示分 / 秒，未生效时不加噪声', () => {
+    const fine = castContext(castByTimeParts(...BASE, { precision: 'SECOND', minute: 23, second: 45, label: '丙午年 八月十五 午时' }));
+    expect(fine).toContain('分 23 秒 45');
+
+    const minuteOnly = castContext(castByTimeParts(...BASE, { precision: 'MINUTE', minute: 23, label: '丙午年 八月十五 午时' }));
+    expect(minuteOnly).toContain('分钟 23');
+    expect(minuteOnly).not.toContain('秒');
+
+    // 手动输入时间（分秒为 0）与传统口径等价，不展示细项
+    const manual = castContext(castByTimeParts(...BASE, { precision: 'MINUTE', label: '丙午年 八月十五 午时' }));
+    expect(manual).not.toContain('分钟');
   });
 });

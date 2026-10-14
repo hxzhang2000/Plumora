@@ -12,6 +12,7 @@ import {
   castByCharacter,
   castByNumber,
   castByRandom,
+  castByDaily,
   castByTime,
   castContext,
   hourBranchName,
@@ -19,7 +20,9 @@ import {
   type CastResult,
   type CastMethod,
 } from '@plumora/core';
-import { isHanChar, lookupStrokes, type StrokeStandard } from '@plumora/knowledge';
+import { isHanChar } from '@plumora/knowledge/han';
+import type { StrokeStandard } from '@plumora/knowledge';
+import { loadStrokes, lookupStrokes, preloadStrokes, strokesReady } from '@/platform/strokeTable';
 import {
   isValidSolarDate,
   leapDays,
@@ -31,7 +34,7 @@ import {
 } from '@plumora/lunar';
 import SegControl from '@/components/SegControl.vue';
 import { navigate } from '@/router';
-import { setCurrentCast } from '@/stores/cast';
+import { ensureResolved, setCurrentCast } from '@/stores/cast';
 import { updateSetting, useSettings } from '@/stores/settings';
 import { toast } from '@/stores/toast';
 
@@ -41,6 +44,22 @@ const settings = useSettings();
 
 /** 起卦前默念所问之事；起卦后带入结果页，用户可选择是否保存为卦例 */
 const question = ref('');
+
+/** 领域快捷标签：点一下把示例问句填进输入框（降低起卦门槛） */
+const QUICK_TAGS = [
+  { label: '事业', fill: '我最近的工作事业如何' },
+  { label: '财运', fill: '最近的财运怎么样' },
+  { label: '感情', fill: '我和 TA 的感情发展如何' },
+  { label: '健康', fill: '身体方面要注意什么' },
+  { label: '学业', fill: '这次考试能顺利吗' },
+  { label: '出行', fill: '这次出行顺利吗' },
+  { label: '寻物', fill: '我丢的东西能找回吗' },
+  { label: '官司', fill: '这场纠纷能赢吗' },
+];
+
+function fillTag(fill: string): void {
+  question.value = fill;
+}
 
 /* ---------- 方式 ---------- */
 
@@ -325,6 +344,26 @@ watch(timeSource, (src) => {
 const num1 = ref<Field>('');
 const num2 = ref<Field>('');
 
+/** 数字起卦的正整数上限（03 §6.3）——与 core NUMBER_MAX 同值，这里只用于即时提示 */
+const NUM_MAX = 999_999_999;
+
+/**
+ * 即时校验提示：在用户输入的当下就指出越界，而不是等点了「起卦」才 toast。
+ * 空值不报错（未填 ≠ 填错）；返回空串表示无问题。
+ */
+function numProblem(v: Field): string {
+  if (isBlank(v)) return '';
+  const n = Number(v);
+  if (!Number.isFinite(n)) return '请输入数字';
+  if (!Number.isInteger(n)) return '请输入整数';
+  if (n < 1) return '0 视为无效输入，请输入 1 以上的正整数';
+  if (n > NUM_MAX) return `超出上限 ${NUM_MAX.toLocaleString('en-US')}`;
+  return '';
+}
+
+const num1Error = computed(() => numProblem(num1.value));
+const num2Error = computed(() => numProblem(num2.value));
+
 /* ---------- 汉字起卦 ---------- */
 
 const char1 = ref('');
@@ -337,25 +376,45 @@ const manualValue = ref('');
 const standard = computed<StrokeStandard>(() => settings.strokeStandard);
 const standardLabel = computed(() => (standard.value === 'TRADITIONAL' ? '繁体' : '简体'));
 
+/**
+ * 切到「汉字」时立刻预热笔画表（88KB，拆成独立 chunk 按需拉）。
+ * immediate + 初始值判断：默认方式就是汉字时（用户上次选的）首屏也要拉。
+ * await 藏在用户打字之前，输入框的笔画提示基本不会出现「加载中」。
+ */
+watch(
+  isCharacter,
+  (on) => {
+    if (on) preloadStrokes();
+  },
+  { immediate: true },
+);
+
+/**
+ * 查笔画。三种「查不到」互相区分，否则 UI 只能一律说「未收录」：
+ *   null      —— 还没输入
+ *   invalid   —— 不是汉字
+ *   loading   —— 表还没下下来（正常只在冷启动切到汉字方式的一瞬间）
+ *   missing   —— 表就位但确实查无此字 → 引导手动输入笔画
+ */
 function strokeInfo(ch: string) {
   if (!ch) return null;
   if (!isHanChar(ch)) return { invalid: true as const };
-  return lookupStrokes(ch, standard.value, manualStrokes);
+  const info = lookupStrokes(ch, standard.value, manualStrokes);
+  if (info) return info;
+  return strokesReady() ? { missing: true as const } : { loading: true as const };
 }
 
-const strokeHint1 = computed(() => {
-  const info = strokeInfo(char1.value);
+function strokeHintOf(ch: string): string {
+  const info = strokeInfo(ch);
   if (!info) return '';
   if ('invalid' in info) return '请输入汉字';
+  if ('loading' in info) return '正在加载笔画表…';
+  if ('missing' in info) return '未收录该字笔画，起卦时可手动填写';
   return `${info.strokes} 画${info.manual ? '（手动）' : ''}${info.fellBackToSimplified ? '（繁体缺省，按简体）' : ''}`;
-});
+}
 
-const strokeHint2 = computed(() => {
-  const info = strokeInfo(char2.value);
-  if (!info) return '';
-  if ('invalid' in info) return '请输入汉字';
-  return `${info.strokes} 画${info.manual ? '（手动）' : ''}${info.fellBackToSimplified ? '（繁体缺省，按简体）' : ''}`;
-});
+const strokeHint1 = computed(() => strokeHintOf(char1.value));
+const strokeHint2 = computed(() => strokeHintOf(char2.value));
 
 function openManual(char: string, slot: number) {
   manualFor.value = { char, slot };
@@ -372,7 +431,7 @@ function confirmManual() {
   }
   manualStrokes[target.char] = v;
   manualFor.value = null;
-  doCast();
+  void doCast();
 }
 
 /* ---------- 起卦 ---------- */
@@ -382,15 +441,18 @@ const busy = ref(false);
 function buildCast(): CastResult | null {
   switch (method.value) {
     case 'TIME': {
+      // 时间精度口径（03 §6.6）由设置决定：SHICHEN 为纯传统时辰，MINUTE / SECOND
+      // 让动爻追加分钟 / 分+秒。手动输入只填到「时」，分秒恒为 0，两种口径等价。
+      const timeOpts = { precision: settings.timePrecision };
       if (isManualTime.value) {
         const resolved = resolveManualTime();
         if (!resolved.ok) {
           toast(resolved.error);
           return null;
         }
-        return castByTime(resolved.date, solarlunarProvider);
+        return castByTime(resolved.date, solarlunarProvider, timeOpts);
       }
-      return castByTime(now.value, solarlunarProvider);
+      return castByTime(now.value, solarlunarProvider, timeOpts);
     }
     case 'NUMBER': {
       const v1 = Number(num1.value);
@@ -424,7 +486,9 @@ function buildCast(): CastResult | null {
         return null;
       }
       const s1 = strokeInfo(c1);
-      if (!s1 || 'invalid' in s1) {
+      // 字面判定已过，这里只剩「查到了」与「没查到」两种可能：
+      // 没查到统一走手动补笔画（doCast 已确保表就位，loading 不会走到这里）。
+      if (!s1 || !('strokes' in s1)) {
         toast(`「${c1}」未收录笔画，请手动输入`);
         openManual(c1, 1);
         return null;
@@ -439,7 +503,7 @@ function buildCast(): CastResult | null {
         return null;
       }
       const s2 = strokeInfo(c2);
-      if (!s2 || 'invalid' in s2) {
+      if (!s2 || !('strokes' in s2)) {
         toast(`「${c2}」未收录笔画，请手动输入`);
         openManual(c2, 2);
         return null;
@@ -460,14 +524,28 @@ function buildCast(): CastResult | null {
   }
 }
 
-function doCast() {
+async function doCast() {
   if (busy.value) return;
   busy.value = true;
   try {
+    /* 汉字起卦要先确保笔画表就位（它是按需加载的独立 chunk）。
+     * 预热一般已经完成，这里只是兜底：用户切到「汉字」后 0.5 秒就点起卦，
+     * 或直接分享链接进到汉字方式，都必须等到表到齐再算，不能猜笔画。 */
+    if (method.value === 'CHARACTER') {
+      await loadStrokes();
+      if (!strokesReady()) {
+        toast('笔画表加载失败，请检查网络后重试');
+        return;
+      }
+    }
     const cast = buildCast();
     if (!cast) return;
     setCurrentCast(cast, settings.tiYongRule, question.value);
     question.value = ''; // 已随暂存带到结果页；起卦页清空，便于「再起一卦」
+    /* 等推导就位再跳转：推导要用六十四卦全表（按需加载的独立 chunk），
+     * setCurrentCast 已发起拉取，这里只是在跳转前等它落地 ——
+     * 与结果页自身的 chunk 并行，正常情况下几乎无等待。 */
+    await ensureResolved();
     navigate('/result');
   } catch (e) {
     toast(e instanceof CastInputError ? e.message : `起卦失败：${(e as Error).message}`);
@@ -476,11 +554,22 @@ function doCast() {
   }
 }
 
-function doRandomCast() {
+async function doRandomCast() {
   const cast = castByRandom();
   setCurrentCast(cast, settings.tiYongRule, question.value);
   question.value = ''; // 同上：清空起卦页输入，便于「再起一卦」
   toast(`随机起卦：${castContext(cast)}`);
+  await ensureResolved();
+  navigate('/result');
+}
+
+/** 每日一卦：以当天日期为种子，结果整天稳定 */
+async function doDailyCast() {
+  const cast = castByDaily();
+  setCurrentCast(cast, settings.tiYongRule, question.value);
+  question.value = '';
+  toast(`每日一卦：${castContext(cast)}`);
+  await ensureResolved();
   navigate('/result');
 }
 </script>
@@ -499,6 +588,17 @@ function doRandomCast() {
           maxlength="200"
           placeholder="先默念所问，再起卦；起卦后可选择是否保存卦例"
         />
+        <div class="q-tags" role="group" aria-label="常用所问示例">
+          <button
+            v-for="t in QUICK_TAGS"
+            :key="t.label"
+            type="button"
+            class="q-tag"
+            @click="fillTag(t.fill)"
+          >
+            {{ t.label }}
+          </button>
+        </div>
       </div>
 
       <!-- 时间 -->
@@ -655,7 +755,11 @@ function doRandomCast() {
             max="999999999"
             placeholder="如 3"
             inputmode="numeric"
+            :aria-invalid="num1Error ? 'true' : undefined"
+            :class="{ 'input-err': num1Error }"
+            @keydown.enter="doCast"
           />
+          <span v-if="num1Error" class="hint err">{{ num1Error }}</span>
         </div>
         <div class="field">
           <label for="num-2">第二数</label>
@@ -667,7 +771,11 @@ function doRandomCast() {
             max="999999999"
             placeholder="如 8"
             inputmode="numeric"
+            :aria-invalid="num2Error ? 'true' : undefined"
+            :class="{ 'input-err': num2Error }"
+            @keydown.enter="doCast"
           />
+          <span v-if="num2Error" class="hint err">{{ num2Error }}</span>
         </div>
       </div>
       <p class="rule">
@@ -681,12 +789,26 @@ function doRandomCast() {
       <div class="two-fields">
         <div class="field">
           <label for="char-1">第一字</label>
-          <input id="char-1" v-model="char1" type="text" maxlength="2" placeholder="如 梅" />
+          <input
+            id="char-1"
+            v-model="char1"
+            type="text"
+            maxlength="2"
+            placeholder="如 梅"
+            @keydown.enter="doCast"
+          />
           <span class="hint">{{ strokeHint1 }}</span>
         </div>
         <div class="field">
           <label for="char-2">第二字</label>
-          <input id="char-2" v-model="char2" type="text" maxlength="2" placeholder="如 花" />
+          <input
+            id="char-2"
+            v-model="char2"
+            type="text"
+            maxlength="2"
+            placeholder="如 花"
+            @keydown.enter="doCast"
+          />
           <span class="hint">{{ strokeHint2 }}</span>
         </div>
       </div>
@@ -700,6 +822,7 @@ function doRandomCast() {
           max="40"
           placeholder="1–40"
           aria-label="手动输入笔画数"
+          @keydown.enter="confirmManual"
         />
         <button type="button" class="btn-ghost" @click="confirmManual">确定</button>
         <button type="button" class="btn-ghost" @click="manualFor = null">取消</button>
@@ -714,9 +837,11 @@ function doRandomCast() {
     <!-- 拇指热区内的主按钮（06 §一 原则 4） -->
     <div class="cast-actions">
       <button type="button" class="btn-main" :disabled="busy" @click="doCast">起 卦</button>
-      <button type="button" class="random-btn" @click="doRandomCast">
-        随机起卦（模拟外应 · P2）
-      </button>
+      <div class="quick-casts">
+        <button type="button" class="random-btn" @click="doRandomCast">随机起卦</button>
+        <button type="button" class="random-btn" @click="doDailyCast">每日一卦</button>
+      </div>
+      <p v-if="isNumber || isCharacter" class="enter-tip">在输入框按回车也可直接起卦</p>
     </div>
   </div>
 </template>
@@ -732,6 +857,23 @@ function doRandomCast() {
   margin-bottom: 0;
 }
 
+/* 数字起卦的即时校验：越界当场标红，而不是等提交才 toast */
+.field .hint.err {
+  color: var(--c-second);
+}
+
+.input-err {
+  border-color: var(--c-second);
+}
+
+/* 回车即起卦的提示（可发现性） */
+.enter-tip {
+  margin-top: 8px;
+  text-align: center;
+  font-size: var(--fs-xs);
+  color: var(--c-muted);
+}
+
 /* 起卦方式选择器与其下「所问之事」的间距（同卡内合并） */
 .q-seg {
   margin-bottom: 14px;
@@ -742,6 +884,31 @@ function doRandomCast() {
   margin-bottom: var(--sp-3);
   padding-bottom: var(--sp-3);
   border-bottom: 1px dashed var(--c-line);
+}
+
+/* 领域快捷标签：点一下把示例问句填进输入框 */
+.q-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.q-tag {
+  padding: 4px 10px;
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-pill);
+  background: var(--c-bg);
+  color: var(--c-muted);
+  font-size: var(--fs-xs);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.q-tag:hover {
+  color: var(--c-accent);
+  border-color: var(--c-accent);
+  background: var(--c-accent-soft);
 }
 
 .time-preview {
@@ -915,5 +1082,11 @@ function doRandomCast() {
 
 .random-btn:hover {
   color: var(--c-accent);
+}
+
+.quick-casts {
+  display: flex;
+  gap: 18px;
+  justify-content: center;
 }
 </style>

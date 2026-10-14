@@ -1,13 +1,15 @@
 {
   "name": "@plumora/core",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "type": "module",
   "description": "观梅 · Plumora 起卦核心算法 —— 平台无关纯逻辑，仅依赖 @plumora/knowledge",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
+  "//exports": "resolve 单列子路径入口：它是唯一需要六十四卦全表的一步（约 48KB gzip），而首屏起卦用不到。单列才能被动态 import 拆出去；裸包名保持原样以兼容既有导入。",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./resolve": "./src/resolve.ts"
   },
   "dependencies": {
     "@plumora/knowledge": "*"

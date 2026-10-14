@@ -268,25 +268,32 @@ describe('stores/cast', () => {
   });
 
   it('暂存金标准算例 A：坎上巽下动 1 → 水风井 / 体生用小凶', async () => {
-    const { setCurrentCast, useCurrentCast } = await import('@/stores/cast');
+    const { setCurrentCast, useCurrentCast, useResolvedCast, ensureResolved } = await import(
+      '@/stores/cast'
+    );
     const { castByTimeParts } = await import('@plumora/core');
 
     // 丙午年八月十五午时（07 文档 TC-LC01 的等价输入）
     const cast = castByTimeParts(7, 8, 15, 7, { label: '丙午年 八月十五 午时' });
     const pending = setCurrentCast(cast, 'MOVING_LINE');
 
-    expect(pending.resolved.ben.name).toBe('水风井');
-    expect(pending.resolved.bian.name).toBe('水天需');
-    expect(pending.resolved.hu.name).toBe('火泽睽');
-    expect(pending.resolved.moving).toBe(1);
-    expect(pending.resolved.judge.degree).toBe('XIAO_XIONG');
+    // 推导是异步的（六十四卦全表按需加载，见 stores/cast.ts 文件头）
+    expect(useResolvedCast().value).toBeNull();
+    const resolved = await ensureResolved();
+    expect(resolved).not.toBeNull();
+
+    expect(resolved!.ben.name).toBe('水风井');
+    expect(resolved!.bian.name).toBe('水天需');
+    expect(resolved!.hu.name).toBe('火泽睽');
+    expect(resolved!.moving).toBe(1);
+    expect(resolved!.judge.degree).toBe('XIAO_XIONG');
     expect(pending.context).toContain('丙午年');
     // 注意：ref 会把对象包成 reactive 代理，故此处比字段而非对象身份
     const stored = useCurrentCast().value;
     expect(stored).not.toBeNull();
     expect(stored!.castAt).toBe(pending.castAt);
-    expect(stored!.resolved.ben.name).toBe('水风井');
     expect(stored!.tiYongRule).toBe('MOVING_LINE');
+    expect(useResolvedCast().value!.ben.name).toBe('水风井');
   });
 
   it('sessionStorage 持久化：重新载入模块后仍可还原', async () => {
@@ -297,7 +304,19 @@ describe('stores/cast', () => {
 
     vi.resetModules();
     const mod2 = await import('@/stores/cast');
-    expect(mod2.useCurrentCast().value?.resolved.ben.name).toBe('水风井');
+    expect(mod2.useCurrentCast().value).not.toBeNull();
+    // 还原后推导是惰性的：ensureResolved 才真正算（首屏不为它付费）
+    expect(mod2.useResolvedCast().value).toBeNull();
+    expect((await mod2.ensureResolved())!.ben.name).toBe('水风井');
+  });
+
+  it('ensureResolved 按卦例缓存：同一卦不重复推导', async () => {
+    const { setCurrentCast, ensureResolved } = await import('@/stores/cast');
+    const { castByTimeParts } = await import('@plumora/core');
+    setCurrentCast(castByTimeParts(7, 8, 15, 7, { label: '丙午年 八月十五 午时' }), 'MOVING_LINE');
+    const a = await ensureResolved();
+    const b = await ensureResolved();
+    expect(a).toBe(b); // 同一个对象身份 = 走了缓存
   });
 
   it('clearCurrentCast 清空内存与 sessionStorage', async () => {
@@ -307,5 +326,67 @@ describe('stores/cast', () => {
     clearCurrentCast();
     expect(useCurrentCast().value).toBeNull();
     expect(sessionStorage.length).toBe(0);
+  });
+
+  /* ---------- 分享链接恢复（`#/result?c=…`）----------
+   * 编解码本身在 test/share-link.test.ts；这里只钉住 store 的采纳策略：
+   * 什么时候接管、什么时候必须保持现状不动。 */
+
+  it('adoptSharedCast：合法链接接管整盘（问题不带过来）', async () => {
+    const { adoptSharedCast, useCurrentCast, useResolvedCast, ensureResolved } = await import(
+      '@/stores/cast'
+    );
+    const { castByNumber } = await import('@plumora/core');
+    const { encodeSharedCast } = await import('@/platform/shareLink');
+
+    // 朋友用数字起卦，17 / 8
+    const cast = castByNumber(17, 8);
+    const at = 1_790_000_000_000;
+    expect(adoptSharedCast(encodeSharedCast(cast, 'MOVING_LINE', at))).toBe(true);
+
+    const cur = useCurrentCast().value;
+    expect(cur).not.toBeNull();
+    expect(cur!.cast).toEqual(cast);
+    expect(cur!.castAt).toBe(at);
+    // 链接刻意不含所问之事（隐私）：恢复出来必须为空，不能沿用上一个卦例的问题
+    expect(cur!.question).toBe('');
+
+    // 接管后照常预热推导，结果页不必等：17/8 动 1 → 乾上坤下 → 天地否
+    expect(useResolvedCast().value).toBeNull();
+    expect((await ensureResolved())!.ben.name).toBe('天地否');
+    expect(sessionStorage.length).toBeGreaterThan(0);
+  });
+
+  it('adoptSharedCast：参数缺失 / 不合法一律不动现有卦例', async () => {
+    const { adoptSharedCast, setCurrentCast, useCurrentCast } = await import('@/stores/cast');
+    const { castByTimeParts } = await import('@plumora/core');
+
+    const mine = setCurrentCast(
+      castByTimeParts(7, 8, 15, 7, { label: '丙午年 八月十五 午时' }),
+      'MOVING_LINE',
+      '我的问题',
+    );
+    for (const raw of [undefined, '', '!!!', 'YWJj']) {
+      expect(adoptSharedCast(raw)).toBe(false);
+    }
+    // 逐字段与刚起的那一卦一致（current 是 ref，取出的是响应式代理，
+    // 不能比对象身份）——包括用户填的「所问之事」，说明完全没被碰过。
+    expect(useCurrentCast().value).toEqual(mine);
+    expect(useCurrentCast().value!.question).toBe('我的问题');
+  });
+
+  it('adoptSharedCast：同一盘（castAt 相同）保持本机状态，不抹掉所问之事', async () => {
+    const { adoptSharedCast, setCurrentCast, useCurrentCast } = await import('@/stores/cast');
+    const { castByNumber } = await import('@plumora/core');
+    const { encodeSharedCast } = await import('@/platform/shareLink');
+
+    const cast = castByNumber(17, 8);
+    // 自己起卦后地址栏被写入分享参数，随后刷新页面：链接与 sessionStorage 是同一盘，
+    // 此时应以本机状态为准（它还带着用户填的「所问之事」）
+    const mine = setCurrentCast(cast, 'MOVING_LINE', '这次面试能否通过');
+    expect(adoptSharedCast(encodeSharedCast(cast, 'MOVING_LINE', mine.castAt))).toBe(false);
+
+    const cur = useCurrentCast().value!;
+    expect(cur.question).toBe('这次面试能否通过');
   });
 });

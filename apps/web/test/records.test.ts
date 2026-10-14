@@ -170,6 +170,64 @@ describe('§3.7 卦例记录存储（Web / IndexedDB）', () => {
     expect(await countRecords()).toBe(0);
   });
 
+  it('TC-D07 批量写入 insertRecords（合并模式）追加全部记录', async () => {
+    const { insertRecord, insertRecords, countRecords, listRecords } = await freshRecords();
+    await insertRecord(rec({ createdAt: 1, question: '原有' }));
+
+    const n = await insertRecords([
+      rec({ createdAt: 2, question: '导入甲' }),
+      rec({ createdAt: 3, question: '导入乙' }),
+    ]);
+
+    expect(n).toBe(2);
+    expect(await countRecords()).toBe(3);
+    expect((await listRecords()).some((r) => r.question === '原有')).toBe(true);
+  });
+
+  it('TC-D08 批量写入（覆盖模式）先清空再写入', async () => {
+    const { insertRecord, insertRecords, countRecords, listRecords } = await freshRecords();
+    await insertRecord(rec({ createdAt: 1, question: '将被清掉' }));
+
+    await insertRecords([rec({ createdAt: 5, question: '覆盖后仅此一条' })], true);
+
+    const all = await listRecords();
+    expect(await countRecords()).toBe(1);
+    expect(all.map((r) => r.question)).toEqual(['覆盖后仅此一条']);
+  });
+
+  it('TC-D10 撤销删除：restoreRecords 保留原 id 回写', async () => {
+    const { insertRecord, getRecord, deleteRecord, restoreRecords, countRecords } =
+      await freshRecords();
+    const id = await insertRecord(rec({ createdAt: 42, question: '待撤销' }));
+    const snapshot = (await getRecord(id)) as HexagramRecord;
+
+    await deleteRecord(id);
+    expect(await getRecord(id)).toBeUndefined();
+
+    await restoreRecords([snapshot]);
+    expect(await countRecords()).toBe(1);
+    const back = (await getRecord(id)) as HexagramRecord;
+    expect(back.question).toBe('待撤销');
+    expect(back.createdAt).toBe(42); // 起卦时间不得因撤销而变
+  });
+
+  it('TC-D11 撤销清空：批量恢复全部记录且 id 不变', async () => {
+    const { insertRecord, clearRecords, restoreRecords, countRecords, listRecords } =
+      await freshRecords();
+    const a = await insertRecord(rec({ createdAt: 1, question: '甲' }));
+    const b = await insertRecord(rec({ createdAt: 2, question: '乙' }));
+    const snapshot = await listRecords();
+
+    await clearRecords();
+    expect(await countRecords()).toBe(0);
+
+    await restoreRecords(snapshot);
+    expect(await countRecords()).toBe(2);
+    expect((await listRecords()).map((r) => r.question).sort()).toEqual(['乙', '甲']);
+    const ids = (await listRecords()).map((r) => r.id).sort();
+    expect(ids).toEqual([a, b].sort());
+  });
+
   /**
    * 审查 W-5：打开失败不能污染 dbPromise。
    *
