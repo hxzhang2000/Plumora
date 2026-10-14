@@ -210,4 +210,16 @@ export interface ResolvedHexagram {
   readonly yong: TrigramNumber;
   readonly tiYongRule: TiYongRule;
   readonly judge: JudgeResult;
+  /**
+   * 互卦体用生克判断。
+   * 体卦固定为本卦之体（ti），用卦取互卦中与原「用」侧同位之卦
+   * （本卦体在上则取互卦下卦、体在下则取互卦上卦）。
+   */
+  readonly huJudge: JudgeResult;
+  /**
+   * 变卦体用生克判断。
+   * 体卦固定为本卦之体（ti，变卦中不动之一卦），用卦取变卦中与原「用」侧
+   * 同位之卦（即动爻所在、已变动的那一卦）。
+   */
+  readonly bianJudge: JudgeResult;
 }

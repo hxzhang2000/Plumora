@@ -67,4 +67,11 @@ describe('设置载入与起卦方式清洗', () => {
     store.set(SETTINGS_KEY, '{ not json');
     expect(loadSettings().defaultCastMethod).toBe('TIME');
   });
+
+  it('已下线的历史键（如手动布局 layoutMode）被剥掉，不写回存储', () => {
+    store.set(SETTINGS_KEY, JSON.stringify({ ...DEFAULT_SETTINGS, layoutMode: 'DESKTOP' }));
+    const s = loadSettings();
+    expect(s).toEqual(DEFAULT_SETTINGS);
+    expect('layoutMode' in s).toBe(false);
+  });
 });

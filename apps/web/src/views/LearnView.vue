@@ -86,7 +86,7 @@ function pick(upper: TrigramNumber, lower: TrigramNumber) {
     <!-- 六十四卦 -->
     <template v-else-if="view === 'grid'">
       <section class="card">
-        <h3 class="card-title">六十四卦速查（行＝上卦，列＝下卦，点格查看）</h3>
+        <h3 class="card-title">六十四卦速查（行＝上卦，列＝下卦）</h3>
         <div class="grid64">
           <div class="grid-row head">
             <span class="grid-side" />
@@ -110,7 +110,7 @@ function pick(upper: TrigramNumber, lower: TrigramNumber) {
         <div v-if="selectedHex" class="hex-detail">
           <div class="hd-head">
             <b class="serif">{{ selectedHex.name }}</b>
-            <span>{{ ['乾', '兑', '离', '震', '巽', '坎', '艮', '坤'][selectedHex.upper - 1] }}上{{ ['乾', '兑', '离', '震', '巽', '坎', '艮', '坤'][selectedHex.lower - 1] }}下 · 卦代码 {{ selectedHex.code }}</span>
+            <span>{{ ['乾', '兑', '离', '震', '巽', '坎', '艮', '坤'][selectedHex.upper - 1] }}上{{ ['乾', '兑', '离', '震', '巽', '坎', '艮', '坤'][selectedHex.lower - 1] }}下</span>
           </div>
           <div class="kw-row">
             <span class="kw-title">卦意</span>
@@ -224,8 +224,10 @@ function pick(upper: TrigramNumber, lower: TrigramNumber) {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: var(--fs-xs);
-  color: var(--c-muted);
+  font-family: var(--font-serif);
+  font-size: var(--fs-lg);
+  font-weight: 700;
+  color: var(--c-ink);
 }
 
 .grid-cell {

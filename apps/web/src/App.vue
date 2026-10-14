@@ -1,9 +1,14 @@
 <script setup lang="ts">
 /**
- * 应用外壳 —— 自适应布局（用户要求「电脑端 + 移动端自适应」）
+ * 应用外壳 —— 布局形态由设备识别自动决定（用户 2026-10-13 要求）
  *
  *   < 900px ：顶部标题栏 + 底部 3 Tab + 单列内容
  *   ≥ 900px ：左侧固定导航 + 居中内容区（06 §六 折叠屏/平板/桌面展开态）
+ *
+ * 手机 / 电脑由 platform/settings.ts 的 detectDeviceKind() 自动识别
+ * （UA + 指针类型 + 屏幕尺寸），不再提供手动「电脑 / 手机」切换：
+ * 手机登录就是手机形态，电脑登录就是电脑形态。电脑设备把窗口拉窄到
+ * 900px 以下时仍会回落手机形态（视口兜底，见 resolveLayout）。
  *
  * 底部 3 Tab 只属于手机形态：桌面形态左侧已有主菜单，两处同时出现是重复入口
  * （产品口径：电脑模式不显示底部菜单）。隐藏走 CSS（见下方 .tabbar 规则），
@@ -12,8 +17,9 @@
  * 两种形态都渲染在 DOM 中，由 CSS 切换（判据是 `<html data-layout>`，
  * 见下方断点说明），避免 JS 断点判断带来的首屏闪烁与布局抖动。
  *
- * 用户可以在顶栏 / 侧栏一键切换「电脑模式 / 手机模式」（LayoutToggle），
- * 也可以在设置面板里选「自动 / 电脑 / 手机」。
+ * 桌面形态的侧栏可以「收回」：点侧栏顶部的收回钮后整条侧栏收起，
+ * 内容区左上角浮出展开钮，再点即可恢复。收回状态写入 localStorage
+ * （plumora.sidebar.v1），刷新后保持。
  *
  * 宽屏上处于「手机形态」时会自动套上真机框预览（390 × 844 手机壳），
  * 进出只走顶栏的 DeviceFrameToggle（机身下方不再放第二处退出口），样式见 styles/frame.css。
@@ -30,7 +36,6 @@ import RecordsView from '@/views/RecordsView.vue';
 import ResultView from '@/views/ResultView.vue';
 import ShiYiPanel from '@/components/ShiYiPanel.vue';
 import DisclaimerGate from '@/components/DisclaimerGate.vue';
-import LayoutToggle from '@/components/LayoutToggle.vue';
 import NavList from '@/components/NavList.vue';
 import QrCodeDialog from '@/components/QrCodeDialog.vue';
 import QrEntry from '@/components/QrEntry.vue';
@@ -41,6 +46,34 @@ import { useQrDialog } from '@/stores/qrDialog';
 import '@/stores/deviceFrame';
 
 const settingsOpen = ref(false);
+
+/**
+ * 侧栏收起状态（仅桌面形态有意义）。
+ *
+ * 持久化到独立键（plumora.sidebar.v1）而不是并进设置面板的 Settings：
+ * 它是「布局操作」而非「偏好设置」，且与布局形态同属外观层，
+ * 读在模块加载时完成，首屏即生效，无闪烁。
+ */
+const SIDEBAR_KEY = 'plumora.sidebar.v1';
+
+function loadSidebarCollapsed(): boolean {
+  try {
+    return localStorage.getItem(SIDEBAR_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+const sidebarCollapsed = ref(loadSidebarCollapsed());
+
+function toggleSidebar(): void {
+  sidebarCollapsed.value = !sidebarCollapsed.value;
+  try {
+    localStorage.setItem(SIDEBAR_KEY, sidebarCollapsed.value ? '1' : '0');
+  } catch {
+    /* 隐私模式 / 配额满：静默降级为「本次会话内有效」 */
+  }
+}
 
 /**
  * 二维码弹窗：弹窗本体只在这里渲染一份（Teleport 到 #app），
@@ -86,18 +119,33 @@ const brandMark = './icon.svg';
 
 <template>
   <div class="shell">
-    <aside class="sidebar">
-      <div class="brand serif">
-        <img class="brand-mark" :src="brandMark" alt="" aria-hidden="true" />
-        <div class="brand-text">
-          <b>观梅</b>
-          <span class="brand-dot" aria-hidden="true">·</span>
-          <span>PLUMORA</span>
+    <aside class="sidebar" :class="{ collapsed: sidebarCollapsed }">
+      <div class="brand-row">
+        <div class="brand serif">
+          <img class="brand-mark" :src="brandMark" alt="" aria-hidden="true" />
+          <div class="brand-text">
+            <b>观梅</b>
+            <span class="brand-latin"
+              ><span class="brand-dot" aria-hidden="true">·</span>PLUMORA</span
+            >
+          </div>
         </div>
+        <button
+          type="button"
+          class="icon-btn side-collapse"
+          aria-label="收回侧边栏"
+          title="收回侧边栏"
+          @click="toggleSidebar"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="3" y="4.5" width="18" height="15" rx="2" />
+            <path d="M9.5 4.5v15" />
+            <path d="M15.5 9.5 13 12l2.5 2.5" />
+          </svg>
+        </button>
       </div>
       <NavList variant="side" />
       <div class="sidebar-foot">
-        <LayoutToggle variant="side" />
         <button type="button" class="side-settings" @click="settingsOpen = true">
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <circle cx="12" cy="12" r="3.2" />
@@ -108,9 +156,24 @@ const brandMark = './icon.svg';
           <span>设置</span>
         </button>
         <QrEntry variant="side" />
-        <p class="disclaimer">本应用仅供传统文化学习与研究使用。</p>
       </div>
     </aside>
+
+    <!-- 侧栏收回后的展开钮：内容区左上角浮动，仅桌面形态可见 -->
+    <button
+      v-if="sidebarCollapsed"
+      type="button"
+      class="side-reopen"
+      aria-label="展开侧边栏"
+      title="展开侧边栏"
+      @click="toggleSidebar"
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="3" y="4.5" width="18" height="15" rx="2" />
+        <path d="M9.5 4.5v15" />
+        <path d="M13 9.5l2.5 2.5L13 14.5" />
+      </svg>
+    </button>
 
     <div class="body">
       <header class="appbar">
@@ -118,12 +181,12 @@ const brandMark = './icon.svg';
           <img class="brand-mark" :src="brandMark" alt="" aria-hidden="true" />
           <div class="brand-text">
             <b>观梅</b>
-            <span class="brand-dot" aria-hidden="true">·</span>
-            <span>PLUMORA</span>
+            <span class="brand-latin"
+              ><span class="brand-dot" aria-hidden="true">·</span>PLUMORA</span
+            >
           </div>
         </div>
         <div class="appbar-ops">
-          <LayoutToggle variant="bar" />
           <QrEntry variant="bar" />
           <button type="button" class="icon-btn" aria-label="设置" @click="settingsOpen = true">
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -187,8 +250,68 @@ const brandMark = './icon.svg';
   background: var(--c-bg);
 }
 
-.sidebar .brand {
+/* 收回态：整条侧栏退出布局（display:none 一并移出 Tab 序与无障碍树），
+   内容区随之占满；展开钮从 .side-reopen 浮出。
+   选择器必须带上 [data-layout='desk']：与「桌面形态展开侧栏」规则
+   （下方 [data-layout='desk'] .sidebar）特异性持平，仅靠书写顺序取胜
+   太脆——将来任何人调整两条规则的先后，收回态就会被静默打破。 */
+[data-layout='desk'] .sidebar.collapsed {
+  display: none;
+}
+
+/* 品牌行：印章 + 字标居左，收回钮居右 */
+.brand-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   padding: 0 8px 22px;
+}
+
+.brand-row .brand {
+  padding: 0;
+  min-width: 0;
+}
+
+/* 收回钮：沿用 .icon-btn 的标准 40px 圆形（与顶栏各钮同款，触控目标一致）。
+   早先想缩到 36px 给品牌让位，但 .icon-btn 同特异性后置胜出、36px 从未生效；
+   品牌改两行 lockup 后侧栏本就有位置，无需再缩，故删去该条失效覆盖。 */
+
+/* 展开钮：侧栏收回后浮在内容区左上角。只桌面形态渲染意义
+   （手机形态侧栏本就不存在），用 [data-layout] 兜底隐藏。 */
+.side-reopen {
+  position: fixed;
+  left: 16px;
+  top: 16px;
+  z-index: 40;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--c-line);
+  border-radius: 50%;
+  background: var(--c-surface);
+  color: var(--c-ink);
+  box-shadow: 0 2px 10px rgb(0 0 0 / 8%);
+}
+
+.side-reopen svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+
+.side-reopen:hover {
+  border-color: var(--c-accent);
+  color: var(--c-accent);
+}
+
+[data-layout='desk'] .side-reopen {
+  display: flex;
 }
 
 .sidebar-foot {
@@ -226,13 +349,6 @@ const brandMark = './icon.svg';
   color: var(--c-accent);
 }
 
-.disclaimer {
-  padding: 0 8px;
-  font-size: var(--fs-xs);
-  line-height: 1.7;
-  color: var(--c-muted);
-}
-
 /* ---------- 主区 ---------- */
 .body {
   display: flex;
@@ -250,13 +366,13 @@ const brandMark = './icon.svg';
  *
  * 第 1 行：品牌（印章 + 观梅 + PLUMORA 字标）独占整行、居左，
  *          不再被后面 4 个操作钮挤压 —— 产品反馈「标题行要单独成行」。
- * 第 2 行：全部操作钮（布局切换 / 手机框 / 扫码 / 设置）整体右对齐，
+ * 第 2 行：全部操作钮（扫码 / 设置）整体右对齐，
  *          沿用单行时代「按钮靠右」的节奏，与标题错开成两行。
  *          用列向 flex 堆叠而不是 flex-wrap 换行：行的归属由结构写死，
  *          不依赖各子项 basis 刚好放不下（那样窄屏一变宽就会回流成一行）。
  *
  * 行高：第 1 行由 30px 印章 / 22px 标题撑到约 33px；第 2 行是 48px 触控行
- *      （LayoutToggle 的 min-height: --tap-min，48dp 触控下限），行距 8px ——
+ *      （按钮 min-height: --tap-min，48dp 触控下限），行距 8px ——
  *      与下方 padding 同为 8，两行读起来是一条顶栏、不是两块各自为政。
  * 分隔线：淡墨 var(--c-line) 收在整条顶栏底部，与内容区起始间距 = 自身
  *      padding 8px + 分隔线 1px + .content-inner 6px ≈ 15px。
@@ -290,15 +406,36 @@ const brandMark = './icon.svg';
   height: 36px;
 }
 
+/* 侧栏品牌两行 lockup：一行排不下——Logo(36) +「观梅」+「· PLUMORA」
+   还要给收回钮留位，自然宽约 190px > 可用约 179px（260px 侧栏实测）。
+   与其被 flex 拆行，不如显式排成两行：「观梅」在上、「· PLUMORA」
+   在下左对齐，Logo 与两行文字整体垂直居中——工整且不随字宽度量漂移。 */
+.sidebar .brand-text {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+}
+
 .brand-text {
   display: flex;
   align-items: baseline;
   gap: 8px;
+  /* 放不下时整组拉丁字标换到第二行；flex-wrap 只是兜底，侧栏的两行
+     lockup 是显式排的（见下方 .sidebar .brand-text）。 */
+  flex-wrap: wrap;
+  align-content: flex-start;
 }
 
 .brand b {
   font-size: var(--fs-xl);
   letter-spacing: 2px;
+  /* 「观梅」两个字永不拆行：拆开正是用户反馈的「怪怪的」 */
+  white-space: nowrap;
+}
+
+/* 「· PLUMORA」捆成一组，换行时整体搬，不和间隔点拆开 */
+.brand-latin {
+  white-space: nowrap;
 }
 
 .brand span {

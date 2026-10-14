@@ -13,9 +13,6 @@
 import { computed, ref, watch } from 'vue';
 import { frameEligible, frameScale } from '@/platform/deviceFrame';
 import { matchesDesktop, resolveLayout, watchViewport } from '@/platform/settings';
-import { useSettings } from '@/stores/settings';
-
-const settings = useSettings();
 
 /**
  * 视口跨断点的触发器：matchMedia 不是响应式源，跨断点时由 watchViewport 打标记，
@@ -30,7 +27,7 @@ watchViewport(() => {
 /** 可用性：宽屏 + 手机形态（真机窄屏恒 false，不会给真手机套框） */
 const available = computed(() => {
   void viewportTick.value; // 视口跨断点时重算
-  return frameEligible(resolveLayout(settings.layoutMode), matchesDesktop());
+  return frameEligible(resolveLayout(), matchesDesktop());
 });
 
 /** 用户手动退出后的抑制：只对「当前这次手机形态」有效 */

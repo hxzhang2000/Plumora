@@ -193,7 +193,8 @@ async function doDelete() {
     </div>
 
     <template v-else-if="resolved && record">
-      <ResultPanel :resolved="resolved" :context="context" />
+      <!-- 排盘结果（含三卦切换；解卦参考卡在其内部：生克结论卡之后、体用类象之前） -->
+      <ResultPanel :resolved="resolved" :context="context" :question="question" />
 
       <section class="card">
         <h3 class="card-title">卦例复盘</h3>

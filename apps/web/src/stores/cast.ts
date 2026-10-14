@@ -19,12 +19,15 @@ export interface PendingCast {
   readonly lunarLabel: string;
   readonly castAt: number;
   readonly tiYongRule: TiYongRule;
+  /** 起卦前用户填写的「所问之事」（可为空串） */
+  readonly question: string;
 }
 
 interface PersistedShape {
   cast: CastResult;
   tiYongRule: TiYongRule;
   castAt: number;
+  question: string;
 }
 
 const current = ref<PendingCast | null>(null);
@@ -34,13 +37,18 @@ function restore(): void {
     const raw = sessionStorage.getItem(KEY);
     if (!raw) return;
     const p = JSON.parse(raw) as PersistedShape;
-    current.value = materialize(p.cast, p.tiYongRule, p.castAt);
+    current.value = materialize(p.cast, p.tiYongRule, p.castAt, p.question ?? '');
   } catch {
     current.value = null;
   }
 }
 
-function materialize(cast: CastResult, tiYongRule: TiYongRule, castAt: number): PendingCast {
+function materialize(
+  cast: CastResult,
+  tiYongRule: TiYongRule,
+  castAt: number,
+  question: string,
+): PendingCast {
   return {
     cast,
     resolved: resolve(cast.upper, cast.lower, cast.moving, tiYongRule),
@@ -48,6 +56,7 @@ function materialize(cast: CastResult, tiYongRule: TiYongRule, castAt: number): 
     lunarLabel: cast.method === 'TIME' ? cast.label : lunarLabelOf(new Date(castAt)),
     castAt,
     tiYongRule,
+    question,
   };
 }
 
@@ -55,13 +64,17 @@ export function useCurrentCast() {
   return current;
 }
 
-/** 起卦完成 → 暂存并持久化 */
-export function setCurrentCast(cast: CastResult, tiYongRule: TiYongRule): PendingCast {
+/** 起卦完成 → 暂存并持久化（question 为起卦前填写的「所问之事」） */
+export function setCurrentCast(cast: CastResult, tiYongRule: TiYongRule, question = ''): PendingCast {
   const castAt = Date.now();
-  const pending = materialize(cast, tiYongRule, castAt);
+  const q = question.trim();
+  const pending = materialize(cast, tiYongRule, castAt, q);
   current.value = pending;
   try {
-    sessionStorage.setItem(KEY, JSON.stringify({ cast, tiYongRule, castAt } satisfies PersistedShape));
+    sessionStorage.setItem(
+      KEY,
+      JSON.stringify({ cast, tiYongRule, castAt, question: q } satisfies PersistedShape),
+    );
   } catch {
     /* 忽略配额问题 */
   }

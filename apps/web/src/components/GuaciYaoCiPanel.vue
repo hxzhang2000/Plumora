@@ -12,9 +12,8 @@
  * 视觉令牌全部沿用 apps/web/src/styles/tokens.css（--c-* / --fs-* / --sp-* / --r-* / --font-serif）。
  * 动画统一走 var(--dur) 与 var(--ease)，`prefers-reduced-motion` 由 tokens.css 全局降级。
  */
-import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import type { Hexagram, HexagramLine } from '@plumora/knowledge';
-import { toast } from '@/stores/toast';
 
 const props = withDefaults(
   defineProps<{
@@ -28,13 +27,6 @@ const props = withDefaults(
 
 /** 位置角标 ①②③④⑤⑥（下标 = 爻位 1–6，Q3 裁定） */
 const CIRCLED = ['', '①', '②', '③', '④', '⑤', '⑥'] as const;
-
-/** 复制图标 SVG（Feather 风格描边） */
-const COPY_SVG =
-  '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
-/** 复制成功对勾 SVG */
-const CHECK_SVG =
-  '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>';
 
 // ============ 数据存在性判断 ============
 
@@ -131,74 +123,43 @@ function toggleAllXx(): void {
   }
 }
 
-// ============ 复制 ============
+// ============ 卦辞 / 爻辞：拆分为「原义（古文）」与「释义」两行（用户需求） ============
+// 数据里 guaci 形如「革：…」、guaciMeaning 形如「革卦：…」、爻辞释义形如「初九：…」，
+// 卦名 / 爻名已在上方加粗单独成行，故此处去掉冗余前缀，避免重复。
 
-/** 当前正在显示"已复制"图标的段落 key（同一时间只有一个按钮显示对勾） */
-const copiedKey = ref<string | null>(null);
-let copiedTimer: ReturnType<typeof setTimeout> | null = null;
-
-/**
- * 复制文本到剪贴板：优先 Clipboard API，降级到 document.execCommand('copy')。
- * 成功：显示对勾 2.5s + toast「已复制」；失败：toast「复制失败，请长按选择文本」。
- */
-async function copyText(text: string, key: string): Promise<void> {
-  if (!text) return;
-  try {
-    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(text);
-    } else {
-      // 兜底：非安全上下文或旧浏览器
-      const ta = document.createElement('textarea');
-      ta.value = text;
-      ta.style.position = 'fixed';
-      ta.style.opacity = '0';
-      document.body.appendChild(ta);
-      ta.select();
-      const ok = document.execCommand('copy');
-      ta.remove();
-      if (!ok) throw new Error('execCommand copy failed');
-    }
-    copiedKey.value = key;
-    if (copiedTimer) clearTimeout(copiedTimer);
-    copiedTimer = setTimeout(() => {
-      copiedKey.value = null;
-    }, 2500);
-    toast('已复制');
-  } catch {
-    toast('复制失败，请长按选择文本');
+/** 去掉开头冗余的「名称：」/「名称卦：」前缀（全角或半角冒号），不匹配则原样返回（防御性） */
+function stripLeading(text: string | null | undefined, name: string): string {
+  if (!text) return '';
+  const t = text;
+  for (const p of [`${name}卦：`, `${name}：`, `${name}卦:`, `${name}:`]) {
+    if (t.startsWith(p)) return t.slice(p.length);
   }
+  return t;
 }
 
-onBeforeUnmount(() => {
-  if (copiedTimer) clearTimeout(copiedTimer);
-});
-
-// ============ 各段复制内容构造（§5.5） ============
-
-const guaciCopyText = computed(() => props.hexagram?.guaci ?? '');
-
-/** 爻辞复制：`{name}　{text}`，不含小象 */
-function lineCopyText(line: HexagramLine): string {
-  return `${line.name}　${line.text}`;
-}
-
-/** 小象复制：`《小象》　{xiaoxiang}` */
-function xxCopyText(name: string): string {
-  const xx = xiaoxiangOf(name);
-  return xx ? `《小象》　${xx}` : '';
-}
-
-/** 用九/用六复制：`{kind}　{text}` */
-const yongCopyText = computed(() => {
+/** 卦辞古文（去掉「卦名：」前缀） */
+const guaciOriginal = computed(() => {
   const h = props.hexagram;
-  return h?.yongText ? `${yongKind.value}　${h.yongText}` : '';
+  if (!h?.guaci) return '';
+  return stripLeading(h.guaci, h.shortName);
 });
 
-/** 文言复制：多段以换行连接（Q6） */
-const wenyanCopyText = computed(() => {
-  const w = props.hexagram?.wenyan;
-  return w && w.length ? w.join('\n') : '';
+/** 卦辞释义（去掉「卦名卦：」前缀） */
+const guaciInterpret = computed(() => {
+  const h = props.hexagram;
+  if (!h?.guaciMeaning) return '';
+  return stripLeading(h.guaciMeaning, h.shortName);
 });
+
+/** 爻辞古文（爻名已在上方成行，防御性去掉「爻名：」前缀） */
+function lineOriginal(line: HexagramLine): string {
+  return stripLeading(line.text, line.name);
+}
+
+/** 爻辞释义（去掉「爻名：」前缀） */
+function lineInterpret(line: HexagramLine): string {
+  return line.meaning ? stripLeading(line.meaning, line.name) : '';
+}
 
 // ============ 生命周期：hexagram / movingLine 变化时重置手风琴与小象展开态 ============
 watch(
@@ -227,18 +188,10 @@ watch(
       <section v-if="hexagram?.guaci" class="gya-card">
         <header class="gya-card-head">
           <b class="gya-card-title">卦辞</b>
-          <button
-            type="button"
-            class="gya-copy"
-            :class="{ 'is-copied': copiedKey === 'guaci' }"
-            aria-label="复制卦辞"
-            title="复制此段"
-            @click="copyText(guaciCopyText, 'guaci')"
-          >
-            <span v-html="copiedKey === 'guaci' ? CHECK_SVG : COPY_SVG"></span>
-          </button>
         </header>
-        <p class="gya-text">{{ hexagram.guaci }}</p>
+        <span class="gya-line-badge gya-gua-badge">{{ hexagram.shortName }}</span>
+        <p class="gya-text"><b class="gya-label">原义：</b>{{ guaciOriginal }}</p>
+        <p v-if="guaciInterpret" class="gya-mean"><b class="gya-label">释义：</b>{{ guaciInterpret }}</p>
       </section>
 
       <!-- 爻辞卡组（6 行合一卡，Q3：传统顺序 初→上 + 位置角标） -->
@@ -263,35 +216,24 @@ watch(
               ? `${line.name}动，爻辞：${line.text}`
               : `${line.name}：${line.text}`"
           >
-            <div class="gya-line-head">
-              <div class="gya-line-left">
-                <!-- 位置角标 ①②③④⑤⑥ -->
-                <span class="gya-pos" aria-hidden="true">{{ CIRCLED[line.index] }}</span>
-                <!-- 动爻信号 1/3：朱砂圆点 -->
-                <span v-if="line.index === movingLine" class="gya-dot" aria-hidden="true"></span>
-                <!-- 爻名徽标（有小象数据时可点展开） -->
-                <button
-                  v-if="xiaoxiangOf(line.name)"
-                  type="button"
-                  class="gya-line-badge gya-line-badge--clickable"
-                  :aria-expanded="isXxOpen(line.index)"
-                  :aria-controls="`xx-${line.index}`"
-                  @click="toggleXx(line.index)"
-                >{{ line.name }}</button>
-                <span v-else class="gya-line-badge">{{ line.name }}</span>
-              </div>
+            <div class="gya-line-left">
+              <!-- 位置角标 ①②③④⑤⑥ -->
+              <span class="gya-pos" aria-hidden="true">{{ CIRCLED[line.index] }}</span>
+              <!-- 动爻信号 1/3：朱砂圆点 -->
+              <span v-if="line.index === movingLine" class="gya-dot" aria-hidden="true"></span>
+              <!-- 爻名徽标（有小象数据时可点展开） -->
               <button
+                v-if="xiaoxiangOf(line.name)"
                 type="button"
-                class="gya-copy"
-                :class="{ 'is-copied': copiedKey === `line-${line.index}` }"
-                :aria-label="`复制${line.name}爻辞`"
-                title="复制此段"
-                @click="copyText(lineCopyText(line), `line-${line.index}`)"
-              >
-                <span v-html="copiedKey === `line-${line.index}` ? CHECK_SVG : COPY_SVG"></span>
-              </button>
+                class="gya-line-badge gya-line-badge--clickable"
+                :aria-expanded="isXxOpen(line.index)"
+                :aria-controls="`xx-${line.index}`"
+                @click="toggleXx(line.index)"
+              >{{ line.name }}</button>
+              <span v-else class="gya-line-badge">{{ line.name }}</span>
             </div>
-            <p class="gya-text">{{ line.text }}</p>
+            <p class="gya-text"><b class="gya-label">原义：</b>{{ lineOriginal(line) }}</p>
+            <p v-if="line.meaning" class="gya-mean"><b class="gya-label">释义：</b>{{ lineInterpret(line) }}</p>
 
             <!-- 小象行（字段缺失不渲染；Q4：动爻小象默认展开） -->
             <div
@@ -303,16 +245,6 @@ watch(
               <div class="gya-xx-inner">
                 <div class="gya-xx-head">
                   <span class="gya-xx-prefix">《小象》</span>
-                  <button
-                    type="button"
-                    class="gya-copy gya-copy--sm"
-                    :class="{ 'is-copied': copiedKey === `xx-${line.index}` }"
-                    :aria-label="`复制${line.name}小象`"
-                    title="复制此段"
-                    @click="copyText(xxCopyText(line.name), `xx-${line.index}`)"
-                  >
-                    <span v-html="copiedKey === `xx-${line.index}` ? CHECK_SVG : COPY_SVG"></span>
-                  </button>
                 </div>
                 <p class="gya-text gya-text--xx">{{ xiaoxiangOf(line.name) }}</p>
               </div>
@@ -325,16 +257,6 @@ watch(
       <section v-if="hexagram?.yongText" class="gya-card">
         <header class="gya-card-head">
           <b class="gya-card-title">{{ yongKind }}</b>
-          <button
-            type="button"
-            class="gya-copy"
-            :class="{ 'is-copied': copiedKey === 'yong' }"
-            :aria-label="`复制${yongKind}`"
-            title="复制此段"
-            @click="copyText(yongCopyText, 'yong')"
-          >
-            <span v-html="copiedKey === 'yong' ? CHECK_SVG : COPY_SVG"></span>
-          </button>
         </header>
         <p class="gya-text">{{ hexagram.yongText }}</p>
       </section>
@@ -366,16 +288,6 @@ watch(
           <section v-if="hexagram?.tuan" class="gya-card">
             <header class="gya-card-head">
               <b class="gya-card-title">彖</b>
-              <button
-                type="button"
-                class="gya-copy"
-                :class="{ 'is-copied': copiedKey === 'tuan' }"
-                aria-label="复制彖传"
-                title="复制此段"
-                @click="copyText(hexagram.tuan, 'tuan')"
-              >
-                <span v-html="copiedKey === 'tuan' ? CHECK_SVG : COPY_SVG"></span>
-              </button>
             </header>
             <p class="gya-text">{{ hexagram.tuan }}</p>
           </section>
@@ -384,16 +296,6 @@ watch(
           <section v-if="hexagram?.daxiang" class="gya-card">
             <header class="gya-card-head">
               <b class="gya-card-title">大象</b>
-              <button
-                type="button"
-                class="gya-copy"
-                :class="{ 'is-copied': copiedKey === 'daxiang' }"
-                aria-label="复制大象"
-                title="复制此段"
-                @click="copyText(hexagram.daxiang, 'daxiang')"
-              >
-                <span v-html="copiedKey === 'daxiang' ? CHECK_SVG : COPY_SVG"></span>
-              </button>
             </header>
             <p class="gya-text">{{ hexagram.daxiang }}</p>
           </section>
@@ -402,16 +304,6 @@ watch(
           <section v-if="hexagram?.wenyan && hexagram.wenyan.length" class="gya-card">
             <header class="gya-card-head">
               <b class="gya-card-title">文言</b>
-              <button
-                type="button"
-                class="gya-copy"
-                :class="{ 'is-copied': copiedKey === 'wenyan' }"
-                aria-label="复制文言"
-                title="复制此段"
-                @click="copyText(wenyanCopyText, 'wenyan')"
-              >
-                <span v-html="copiedKey === 'wenyan' ? CHECK_SVG : COPY_SVG"></span>
-              </button>
             </header>
             <p v-for="(p, i) in hexagram.wenyan" :key="i" class="gya-text">{{ p }}</p>
           </section>
@@ -479,48 +371,29 @@ watch(
   font-family: var(--font-sans);
 }
 
-/* ---------- 正文：古典原文，宋体（06 §4.2 与附录 B） ---------- */
+/* ---------- 正文：古典原文，宋体（06 §4.2 与附录 B），字号略缩以让位释义 ---------- */
 .gya-text {
   font-family: var(--font-serif);
-  font-size: clamp(15px, 4.4vw, 17px);
+  font-size: clamp(12.5px, 3.4vw, 14.5px);
   line-height: 1.85;
   letter-spacing: 0.5px;
   color: var(--c-text);
   margin: 0;
 }
 
-/* ---------- 复制按钮 ---------- */
-.gya-copy {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border: 0;
-  background: transparent;
+/* 主区（卦辞 / 爻辞 / 用九）古文「原义」：字号与「释义」(--fs-sm) 对齐，靠字体/颜色/标签区分层级 */
+.gya-main .gya-text {
+  font-size: var(--fs-sm);
+}
+
+/* ---------- 白话释义：黑体、弱化色，置于原文下方，与古文形成层级 ---------- */
+.gya-mean {
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  line-height: 1.7;
+  letter-spacing: 0.2px;
   color: var(--c-muted);
-  opacity: 0.6;
-  cursor: pointer;
-  border-radius: var(--r-sm);
-  transition: color var(--dur), opacity var(--dur), background var(--dur);
-}
-.gya-copy:hover {
-  opacity: 1;
-  color: var(--c-accent);
-  background: var(--c-accent-soft);
-}
-.gya-copy:focus-visible {
-  outline: 2px solid var(--c-accent);
-  outline-offset: 2px;
-}
-.gya-copy.is-copied {
-  color: var(--c-accent);
-  opacity: 1;
-}
-.gya-copy--sm {
-  width: 24px;
-  height: 24px;
+  margin: 6px 0 0;
 }
 
 /* ---------- 爻辞卡组 ---------- */
@@ -583,10 +456,15 @@ watch(
   animation: gya-dot-pop 0.4s var(--ease) 0.3s both;
 }
 
-/* 爻名徽标 */
+/* 卦名徽标（与爻名徽标统一为胶囊样式） */
+.gya-gua-badge {
+  margin-bottom: 6px;
+}
+
+/* 爻名 / 卦名徽标（胶囊样式 + 红字，暂去红边框） */
 .gya-line-badge {
   background: var(--c-surface-2);
-  color: var(--c-ink);
+  color: var(--c-accent);
   border: 1px solid transparent;
   padding: 2px 10px;
   border-radius: var(--r-pill);
@@ -601,21 +479,26 @@ watch(
 }
 .gya-line-badge--clickable {
   cursor: pointer;
-  transition: border-color var(--dur);
+  transition: border-color var(--dur), background var(--dur);
 }
 .gya-line-badge--clickable:hover {
-  border-color: var(--c-accent);
+  background: var(--c-accent-soft);
 }
 .gya-line-badge--clickable:focus-visible {
   outline: 2px solid var(--c-accent);
   outline-offset: 2px;
 }
-
 /* 动爻徽标特殊样式 */
 .gya-line--moving .gya-line-badge {
   background: var(--c-accent-soft);
   color: var(--c-accent);
   font-weight: 600;
+}
+
+/* 原义 / 释义 标签：加重，便于与正文区分层级 */
+.gya-label {
+  font-weight: 600;
+  color: var(--c-text);
 }
 
 /* ---------- 小象行（默认收起，动爻默认展开 Q4） ---------- */

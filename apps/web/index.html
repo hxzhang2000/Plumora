@@ -34,14 +34,31 @@
 
         // 布局形态必须在样式生效前定好：断点判据是 <html data-layout>
         // （见 src/App.vue 的断点说明）。若等 JS 加载完再由 applyLayout 补上，
-        // 宽屏用户会先看到一帧手机布局再跳成电脑布局。
-        var lm = s.layoutMode || 'AUTO';
-        var desk =
-          lm === 'DESKTOP' ||
-          (lm === 'AUTO' && window.matchMedia('(min-width: 900px)').matches);
+        // 电脑用户会先看到一帧手机布局再跳成电脑布局。
+        //
+        // 形态 = 设备识别（与 platform/settings.ts 的 detectDeviceKind /
+        // resolveLayout 保持一致）：手机 UA 或「粗指针 + 小屏」→ 手机；
+        // 否则按视口宽度兜底（≥ 900px 电脑形态）。不再读 layoutMode
+        // （手动「电脑 / 手机」选择已下线，2026-10-13）。
+        function detectMobile() {
+          var ua = navigator.userAgent || '';
+          if (/Android|webOS|iPhone|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|Windows Phone/i.test(ua)) {
+            return true;
+          }
+          if (
+            window.matchMedia &&
+            window.matchMedia('(pointer: coarse)').matches &&
+            window.screen &&
+            Math.min(window.screen.width, window.screen.height) < 500
+          ) {
+            return true;
+          }
+          return false;
+        }
+        var desk = !detectMobile() && window.matchMedia('(min-width: 900px)').matches;
         root.setAttribute('data-layout', desk ? 'desk' : 'mobile');
 
-        // 手机框预览也要在样式生效前定好，否则「强制手机形态 + 宽屏」的用户
+        // 手机框预览也要在样式生效前定好，否则「手机形态 + 宽屏」的用户
         // 会先看到一整屏再收进机身。判据与 src/platform/deviceFrame.ts 一致
         // （宽屏 + 手机形态；真机窄屏恒不命中），尺寸常量同见该文件。
         if (!desk && window.matchMedia('(min-width: 900px)').matches) {

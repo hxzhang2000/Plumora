@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /** 排盘结果页 —— 06 §3.2；保存卦例后提供「查看」动作（06 §五） */
-import { computed, onActivated, ref } from 'vue';
+import { computed, onActivated, ref, watch } from 'vue';
 import { buildRecord, methodCn, type ResolvedHexagram } from '@plumora/core';
 import { TRIGRAMS } from '@plumora/knowledge';
 import ResultPanel from '@/components/ResultPanel.vue';
@@ -13,8 +13,21 @@ import { toast } from '@/stores/toast';
 
 const settings = useSettings();
 const current = useCurrentCast();
-const question = ref('');
+/** 起卦前填写、随起卦结果带出；此处仍可修改，再决定是否保存为卦例 */
+const question = ref(current.value?.question ?? '');
 const saving = ref(false);
+
+// 本组件被 App 的 <KeepAlive> 缓存，「再起一卦」后回到结果页不会重新挂载，
+// question 只会在首次挂载时初始化——不监听就会一直显示上一次的空值
+// （表现：起卦页填了所问之事，解卦却说「没有记下具体问的是什么事」）。
+// 这里监听暂存的 question：每次起卦（setCurrentCast 更新 current）后，
+// 把输入同步为本次起卦带入的所问之事。
+watch(
+  () => current.value?.question,
+  (q) => {
+    question.value = q ?? '';
+  },
+);
 
 // 直接访问 /result（或刷新后会话丢失）时回到起卦页
 onActivated(() => {
@@ -99,11 +112,14 @@ const isRecordDetail = computed(() => route.value.name === 'record-detail');
       <h1 class="title serif">{{ title }}</h1>
     </header>
 
-    <ResultPanel :resolved="resolved" :context="current?.context" />
+    <!-- 排盘结果（含三卦切换；解卦参考卡在其内部：生克结论卡之后、体用类象之前） -->
+    <ResultPanel :resolved="resolved" :context="current?.context" :question="question" />
 
+    <!-- 起卦完成：所问之事已从起卦页带入（可修改），由用户决定是否保存卦例 -->
     <section class="card save">
+      <h3 class="card-title">保存卦例（选填）</h3>
       <div class="field">
-        <label for="q">所问之事（选填，保存后可复盘）</label>
+        <label for="q">所问之事（起卦前填写，此处可修改）</label>
         <input id="q" v-model="question" type="text" maxlength="200" placeholder="默念所问，一事一占" />
       </div>
       <div class="ops">

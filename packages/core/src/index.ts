@@ -32,6 +32,13 @@ export {
 
 export { lineName, lineNames } from './line.js';
 
+export {
+  interpret,
+  classifyQuestion,
+  DOMAIN_CN,
+} from './interpret.js';
+export type { Interpretation, InterpretationSection, QuestionDomain } from './interpret.js';
+
 export { resolve, resolveFromLines, huLines, changedOf, binaryToLines } from './resolve.js';
 
 export {

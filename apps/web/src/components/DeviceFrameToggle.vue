@@ -5,8 +5,8 @@
  * 只在「宽屏 + 手机形态」下渲染（父级 v-if=available），真机窄屏永不出现，
  * 因此不会挤占真手机顶栏的位置。
  *
- * 语义与 LayoutToggle 相同：按钮状态 = 当前是否在框内，aria-pressed 供读屏判读。
- * 图形是「四角取景框 + 手机」，与 LayoutToggle 的单体手机图标区分开。
+ * 语义与侧栏收回钮一致：按钮状态 = 当前是否在框内，aria-pressed 供读屏判读。
+ * 图形是「四角取景框 + 手机」，与侧栏收回钮的抽屉图标区分开。
  */
 import { computed } from 'vue';
 import { toggleDeviceFrame, useDeviceFrame } from '@/stores/deviceFrame';

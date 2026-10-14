@@ -71,6 +71,12 @@ export function resolve(
   const hu: Hexagram = getHexagram(huUpper, huLower);
   const bian: Hexagram = getHexagram(bianUpper, bianLower);
 
+  // 体卦位置（本卦：上卦为体 or 下卦为体）。体卦在本卦、变卦中固定不动；
+  // 互卦由中间爻重组，按「与原用侧同位」取用卦（产品需求 2026-10-13：互 / 变也要判断体用）。
+  const tiIsUpper = ti === upper;
+  const huYongNo = tiIsUpper ? hu.lower : hu.upper;
+  const bianYongNo = tiIsUpper ? bian.lower : bian.upper;
+
   return {
     lines,
     changedLines,
@@ -85,6 +91,8 @@ export function resolve(
     yong,
     tiYongRule,
     judge: judge(trigram(ti), trigram(yong)),
+    huJudge: judge(trigram(ti), trigram(huYongNo)),
+    bianJudge: judge(trigram(ti), trigram(bianYongNo)),
   };
 }
 

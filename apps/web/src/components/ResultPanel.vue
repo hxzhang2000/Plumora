@@ -9,11 +9,14 @@
  * 信息架构（产品负责人 2026-09-26 意见 4）：**切换器下方的全部内容都装在同一个
  * tabpanel 里**，随 `:key="tab"` 整体重挂载——不存在「切了 tab 下面纹丝不动」的固定区块。
  * 三卦各配一套下方卡片（体用是本卦专属概念，互 / 变视图既不标注、也不给提示）：
- *   本卦 → 生克结论卡（体用五行生克）+ 体用类象 + 卦辞·爻辞（M1 待录入）
- *   互卦 → 互卦构成（二至四爻 / 三至五爻来路）+ 上下卦类象 + 错卦·综卦
- *   变卦 → 动爻与变爻 + 上下卦类象 + 错卦·综卦
- * 互 / 变两套下方内容只写**由爻画可直接推出的事实**（取爻来路、上下卦、爻画异同、
- * 错综结构），不写吉凶断语（01 文档 §五 合规口径）。
+ *   本卦 → 生克结论卡（体用五行生克）+ 解卦参考 + 体用类象 + 卦辞·爻辞（M1 待录入）
+ *   互卦 → 体用生克结论卡 + 互卦构成（二至四爻 / 三至五爻来路）+ 上下卦类象 + 错卦·综卦
+ *   变卦 → 体用生克结论卡 + 动爻与变爻 + 上下卦类象 + 错卦·综卦
+ * （解卦卡位置为 2026-10-13 用户要求：在卦象与生克结论卡之后、体用类象之前，
+ *   仅本卦视图展示——解卦基于本卦体用整体断事，互 / 变视图保持纯事实口径。）
+ * 互 / 变视图自 2026-10-13 起也展示体用生克结论（体卦固定为本卦之体，用卦取互 / 变中
+ * 与原用侧同位之卦）；其余内容仍只写**由爻画可直接推出的事实**（取爻来路、上下卦、
+ * 爻画异同、错综结构），不写额外吉凶断语（01 文档 §五 合规口径）。
  *
  * 保留的硬性布局约定（06 §3.2）：
  *   1. 卦符六爻自上而下绘制（入参一律自下而上，由 HexagramStage / HexagramGlyph 反转）
@@ -27,6 +30,7 @@ import { TRIGRAMS, getHexagramByLines, type Hexagram } from '@plumora/knowledge'
 import DegreeBadge from '@/components/DegreeBadge.vue';
 import HexagramStage from '@/components/HexagramStage.vue';
 import GuaciYaoCiPanel from '@/components/GuaciYaoCiPanel.vue';
+import InterpretationCard from '@/components/InterpretationCard.vue';
 
 type TabKey = 'ben' | 'hu' | 'bian';
 type HalfMark = { kind: 'ti' | 'yong'; text: string };
@@ -42,8 +46,10 @@ const props = withDefaults(
     resolved: ResolvedHexagram;
     /** 起卦上下文（时间/方式/事实标签） */
     context?: string;
+    /** 所问之事（带入解卦卡；为空时解卦按综合泛断） */
+    question?: string;
   }>(),
-  { context: '' },
+  { context: '', question: '' },
 );
 
 const r = computed(() => props.resolved);
@@ -216,6 +222,21 @@ const xxRows = computed(() => [
 
 const relationCn = computed(() => RELATION_CN[r.value.judge.relation]);
 
+/**
+ * 互 / 变视图的体用生克结论（体卦固定为本卦之体，用卦取互 / 变中与原用侧
+ * 同位之卦）。2026-10-13 需求：互卦、变卦也要判断并显示体用关系。
+ */
+const currentJudge = computed(() =>
+  tab.value === 'hu' ? r.value.huJudge : r.value.bianJudge,
+);
+
+/** 互 / 变视图的「用卦」信息：取互 / 变中与原用侧同位的那一卦 */
+const currentYongInfo = computed(() => {
+  const hex = tab.value === 'hu' ? r.value.hu : r.value.bian;
+  const y = TRIGRAMS[tiIsUpper.value ? hex.lower : hex.upper];
+  return `${y.name}（${elementCn(y.element)}）`;
+});
+
 /* ---------------------------------------------------------------
  * 互卦 / 变卦视图的下方事实（意见 4：切到互 / 变时，下方区域整体
  * 换成该卦自己的内容）。全部由爻画直接推出，不含吉凶断语。
@@ -375,6 +396,10 @@ const halfRows = computed(() => {
           </p>
         </section>
 
+        <!-- 解卦参考：结合卦象与所问之事（问题改动实时重算）。
+             位置（2026-10-13 用户要求）：卦象与生克结论卡之后、体用类象之前。 -->
+        <InterpretationCard :resolved="r" :question="question" />
+
         <!-- 体用类象：体 / 用是本卦专属概念，只在本卦视图出现 -->
         <section class="card">
           <h3 class="card-title">体用类象</h3>
@@ -405,8 +430,20 @@ const halfRows = computed(() => {
       </template>
 
       <template v-else>
-        <!-- 互 / 变：该卦自己的推演事实 + 该卦上下卦类象 + 该卦错综。
-             体用生克是本卦专属概念，互 / 变视图不出现、也不做任何提示或改标。 -->
+        <!-- 互 / 变：体用生克结论（2026-10-13 起，互 / 变也判断并显示；
+             体卦固定为本卦之体，用卦取互 / 变中与原用侧同位之卦） -->
+        <section class="card judge">
+          <div class="judge-top">
+            <DegreeBadge :degree="currentJudge.degree" />
+            <b class="serif">{{ RELATION_CN[currentJudge.relation] }}</b>
+          </div>
+          <p class="judge-sum">{{ currentJudge.summary }}</p>
+          <p class="judge-elem">
+            体卦 <b>{{ tiInfo }}</b>　用卦 <b>{{ currentYongInfo }}</b>
+          </p>
+        </section>
+
+        <!-- 互 / 变：该卦自己的推演事实 + 该卦上下卦类象 + 该卦错综。 -->
         <!-- 互卦来路：下互取二至四爻、上互取三至五爻（03 §3.4） -->
         <section v-if="tab === 'hu'" class="card">
           <h3 class="card-title">互卦构成</h3>
@@ -679,8 +716,14 @@ const halfRows = computed(() => {
   margin-bottom: 8px;
 }
 
-.judge-top b {
+/* 生克结论卡首行（大凶 / 用克体 等）放大，强化为视觉焦点 */
+.judge-top :deep(.badge) {
   font-size: var(--fs-md);
+  padding: 4px 12px;
+}
+
+.judge-top b {
+  font-size: var(--fs-xl);
   letter-spacing: 1px;
 }
 

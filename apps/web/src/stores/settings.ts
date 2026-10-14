@@ -14,23 +14,23 @@ import {
 const state = reactive<Settings>(loadSettings());
 
 applyTheme(state.theme);
-applyLayout(state.layoutMode);
+applyLayout();
 
 // 系统主题变化时，仅在「跟随系统」下重新解析
 watchSystemTheme(() => {
   if (state.theme === 'SYSTEM') applyTheme('SYSTEM');
 });
 
-// 视口跨断点时，仅在「自动」下重算（强制值不受视口影响）
+// 视口跨断点时重算（电脑设备窄窗 ↔ 宽窗在两种形态间切换）
 watchViewport(() => {
-  if (state.layoutMode === 'AUTO') applyLayout('AUTO');
+  applyLayout();
 });
 
 // 任何字段变更 → 落盘 + 应用主题 + 应用布局
 watch(state, () => {
   saveSettings({ ...state });
   applyTheme(state.theme);
-  applyLayout(state.layoutMode);
+  applyLayout();
 });
 
 export function useSettings(): Settings {

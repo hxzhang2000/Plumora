@@ -37,6 +37,11 @@ import { toast } from '@/stores/toast';
 
 const settings = useSettings();
 
+/* ---------- 所问之事（起卦前填写，随起卦结果带到结果页） ---------- */
+
+/** 起卦前默念所问之事；起卦后带入结果页，用户可选择是否保存为卦例 */
+const question = ref('');
+
 /* ---------- 方式 ---------- */
 
 const methodOptions = [
@@ -461,7 +466,8 @@ function doCast() {
   try {
     const cast = buildCast();
     if (!cast) return;
-    setCurrentCast(cast, settings.tiYongRule);
+    setCurrentCast(cast, settings.tiYongRule, question.value);
+    question.value = ''; // 已随暂存带到结果页；起卦页清空，便于「再起一卦」
     navigate('/result');
   } catch (e) {
     toast(e instanceof CastInputError ? e.message : `起卦失败：${(e as Error).message}`);
@@ -472,7 +478,8 @@ function doCast() {
 
 function doRandomCast() {
   const cast = castByRandom();
-  setCurrentCast(cast, settings.tiYongRule);
+  setCurrentCast(cast, settings.tiYongRule, question.value);
+  question.value = ''; // 同上：清空起卦页输入，便于「再起一卦」
   toast(`随机起卦：${castContext(cast)}`);
   navigate('/result');
 }
@@ -480,15 +487,23 @@ function doRandomCast() {
 
 <template>
   <div class="cast">
-    <SegControl
-      v-model="method"
-      :options="methodOptions"
-      aria-label="起卦方式"
-    />
+    <!-- 起卦入口：方式选择 + 所问之事 + 对应输入，全部合并为一卡 -->
+    <section class="card panel">
+      <SegControl v-model="method" :options="methodOptions" class="q-seg" aria-label="起卦方式" />
+      <div class="field q-field">
+        <label for="q">所问之事（选填 · 一事一占）</label>
+        <input
+          id="q"
+          v-model="question"
+          type="text"
+          maxlength="200"
+          placeholder="先默念所问，再起卦；起卦后可选择是否保存卦例"
+        />
+      </div>
 
-    <!-- 时间 -->
-    <section v-if="isTime" class="card panel">
-      <h3 class="card-title">年月日时起卦 · 农历自动转换</h3>
+      <!-- 时间 -->
+      <template v-if="isTime">
+        <h3 class="card-title">年月日时起卦 · 农历自动转换</h3>
       <div class="time-preview serif">
         <b>{{ timePreview.label }}</b>
         <span class="time-meta">
@@ -624,11 +639,11 @@ function doRandomCast() {
           <span v-if="lunarEcho" class="mono echo">→ {{ lunarEcho }}</span>
         </p>
       </div>
-    </section>
+      </template>
 
-    <!-- 数字 -->
-    <section v-else-if="isNumber" class="card panel">
-      <h3 class="card-title">数字起卦</h3>
+      <!-- 数字 -->
+      <template v-else-if="isNumber">
+        <h3 class="card-title">数字起卦</h3>
       <div class="two-fields">
         <div class="field">
           <label for="num-1">第一数</label>
@@ -658,11 +673,11 @@ function doRandomCast() {
       <p class="rule">
         正整数，上限 999,999,999；0 视为无效输入。
       </p>
-    </section>
+      </template>
 
-    <!-- 汉字 -->
-    <section v-else-if="isCharacter" class="card panel">
-      <h3 class="card-title">汉字笔画起卦</h3>
+      <!-- 汉字 -->
+      <template v-else-if="isCharacter">
+        <h3 class="card-title">汉字笔画起卦</h3>
       <div class="two-fields">
         <div class="field">
           <label for="char-1">第一字</label>
@@ -693,6 +708,7 @@ function doRandomCast() {
       <p class="rule">
         笔画标准：<b>{{ standardLabel }}</b>（设置中可切换，同一卦内必须统一）。
       </p>
+      </template>
     </section>
 
     <!-- 拇指热区内的主按钮（06 §一 原则 4） -->
@@ -714,6 +730,18 @@ function doRandomCast() {
 
 .panel {
   margin-bottom: 0;
+}
+
+/* 起卦方式选择器与其下「所问之事」的间距（同卡内合并） */
+.q-seg {
+  margin-bottom: 14px;
+}
+
+/* 合并一卡后：「所问之事」与下方方式输入之间的分隔线 */
+.q-field {
+  margin-bottom: var(--sp-3);
+  padding-bottom: var(--sp-3);
+  border-bottom: 1px dashed var(--c-line);
 }
 
 .time-preview {
